@@ -1,0 +1,7 @@
+[package]
+name = "Legends Of 1F600"
+version = "0.1.0"
+authors = ["Nathan Jent <nathanjent@gmail.com>"]
+
+[dependencies]
+twilio = "0.1.0"
