@@ -1,2 +1,2 @@
-# legendsof1f600
+# Legends Of 😀
 An adventurous SMS game
