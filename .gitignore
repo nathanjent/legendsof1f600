@@ -1,3 +1,12 @@
 target
 *.bk
 *.swp
+legendsof1f600/click
+legendsof1f600/flask
+legendsof1f600/itsdangerous.py
+legendsof1f600/jinja2
+legendsof1f600/markupsafe
+legendsof1f600/pytz
+legendsof1f600/six.py
+legendsof1f600/twilio
+legendsof1f600/werkzeug
