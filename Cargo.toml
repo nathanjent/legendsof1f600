@@ -1,7 +1,12 @@
 [package]
-name = "Legends Of 1F600"
+name = "Legends Of 😀"
 version = "0.1.0"
+description = "An adventurous SMS game utilizing the Twilio API"
 authors = ["Nathan Jent <nathanjent@gmail.com>"]
+readme = "README.md"
+repository = "https://github.com/nathanjent/legendsof1f600"
+license = "MIT"
+keywords = ["sms","game","twilio","rust"]
 
 [dependencies]
 twilio = "0.1.0"
