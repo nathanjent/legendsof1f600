@@ -1,4 +1,4 @@
-# Legends Of &#128512;
+# Legends of &#128512;
 An adventurous SMS game.
 
 ### Text, Fight, Win!
