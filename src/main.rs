@@ -7,21 +7,21 @@ use std::io;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Location {
-    pub row: u32,
-    pub column: u32,
+    pub row: i32,
+    pub column: i32,
     pub occupant: char,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Position {
-    pub x: u32,
-    pub y: u32,
+    pub x: i32,
+    pub y: i32,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Velocity {
-    pub dx: u32,
-    pub dy: u32,
+    pub dx: i32,
+    pub dy: i32,
 }
 
 pub struct MotionProcess;
@@ -64,16 +64,21 @@ impl EntityProcess for CommandProcess {
     }
 }
 
-pub struct PrintMessage(pub String);
+pub struct RenderView;
 
-impl System for PrintMessage {
+impl System for RenderView {
     type Components = WorldComponents;
     type Services = ();
 }
 
-impl Process for PrintMessage {
-    fn process(&mut self, _: &mut DataHelper<WorldComponents, ()>) {
-        println!("{}", &self.0);
+impl EntityProcess for RenderView {
+    fn process(&mut self,
+               entities: EntityIter<WorldComponents>,
+               data: &mut DataHelper<WorldComponents, ()>) {
+        let view = String::new();
+        for e in entities {
+        }
+        //println!("{}", view);
     }
 }
 
@@ -82,7 +87,7 @@ components! {
         #[hot] command: Command,
         #[hot] position: Position,
         #[hot] velocity: Velocity,
-        #[cold] location: Location,
+        #[hot] location: Location,
     }
 }
 
@@ -91,11 +96,12 @@ systems! {
         active: {
             motion: EntitySystem<MotionProcess> = EntitySystem::new(
                 MotionProcess,
-                aspect!(<WorldComponents> all: 
-                        [position, velocity, location])
+                aspect!(<WorldComponents> all: [position, velocity])
             ),
-            print_msg: PrintMessage = 
-                PrintMessage("Hello World".to_string()),
+            render: EntitySystem<RenderView> = EntitySystem::new(
+                RenderView,
+                aspect!(<WorldComponents> all: [location])
+            ),
         },
         passive: {}
     }
@@ -165,7 +171,6 @@ fn main() {
     loop {
         let mut input = String::new();
         if let Ok(_) = io::stdin().read_line(&mut input) {
-            world.systems.print_msg.0 = format!("Command: {}", input);
             world.update();
         }
     }
