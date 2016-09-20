@@ -1,3 +1,4 @@
+target/
 *.bk
 *.swp
 src/click

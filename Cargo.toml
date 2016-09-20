@@ -1,0 +1,7 @@
+[package]
+name = "legendsof1f600"
+version = "0.1.0"
+authors = ["Nathan Jent <nathanjent@gmail.com>"]
+
+[dependencies]
+ecs = "0.*"
