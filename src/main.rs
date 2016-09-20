@@ -5,11 +5,11 @@ use ecs::{World, BuildData, DataHelper, EntityIter, ModifyData, Process, System}
 use ecs::system::{EntityProcess, EntitySystem};
 use std::io;
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct WorldMap {
-    pub rows: usize,
-    pub columns: usize,
-    pub buffer: Vec<u32>,
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Location {
+    pub row: u32,
+    pub column: u32,
+    pub occupant: char,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -38,14 +38,10 @@ impl EntityProcess for MotionProcess {
         for e in entities {
             let mut position = data.position[e];
             let velocity = data.velocity[e];
-            let map_position = data.world_map[e].buffer.get(
-                (position.x + velocity.dx * position.y + velocity.dx) as usize);
 
-            if map_position.unwrap() == &0 {
-                position.x += velocity.dx;
-                position.y += velocity.dy;
-                data.position[e] = position;
-            }
+            position.x += velocity.dx;
+            position.y += velocity.dy;
+            data.position[e] = position;
         }
     }
 }
@@ -86,7 +82,7 @@ components! {
         #[hot] command: Command,
         #[hot] position: Position,
         #[hot] velocity: Velocity,
-        #[cold] world_map: WorldMap,
+        #[cold] location: Location,
     }
 }
 
@@ -96,7 +92,7 @@ systems! {
             motion: EntitySystem<MotionProcess> = EntitySystem::new(
                 MotionProcess,
                 aspect!(<WorldComponents> all: 
-                        [position, velocity, world_map])
+                        [position, velocity, location])
             ),
             print_msg: PrintMessage = 
                 PrintMessage("Hello World".to_string()),
@@ -114,21 +110,56 @@ fn main() {
     });
     let world_map = world.create_entity(|entity: BuildData<WorldComponents>,
                                       data: &mut WorldComponents| {
-        data.world_map.add(&entity, WorldMap {
-            rows: 10,
-            columns: 10,
-            buffer: vec![
-                1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                1, 1, 0, 0, 0, 0, 0, 0, 0, 1,
-                1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-                1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-                1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-                1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-                1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-                1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-                1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-                1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        ] });
+        data.location.add(&entity, Location { row: 0, column: 0, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 0, column: 1, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 0, column: 2, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 0, column: 3, occupant: '🌳' });
+        data.location.add(&entity, Location { row: 0, column: 4, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 0, column: 5, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 0, column: 6, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 0, column: 7, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 0, column: 8, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 0, column: 9, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 1, column: 0, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 1, column: 1, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 1, column: 2, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 1, column: 3, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 1, column: 4, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 1, column: 5, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 1, column: 6, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 1, column: 7, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 1, column: 8, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 1, column: 9, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 2, column: 0, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 2, column: 1, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 2, column: 2, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 2, column: 3, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 2, column: 4, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 2, column: 5, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 2, column: 6, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 2, column: 7, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 2, column: 8, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 2, column: 9, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 3, column: 0, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 3, column: 1, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 3, column: 2, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 3, column: 3, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 3, column: 4, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 3, column: 5, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 3, column: 6, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 3, column: 7, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 3, column: 8, occupant: '⬚' });
+        data.location.add(&entity, Location { row: 3, column: 9, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 4, column: 0, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 4, column: 1, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 4, column: 2, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 4, column: 3, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 4, column: 4, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 4, column: 5, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 4, column: 6, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 4, column: 7, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 4, column: 8, occupant: '🌲' });
+        data.location.add(&entity, Location { row: 4, column: 9, occupant: '🌲' });
     });
 
     loop {
