@@ -14,14 +14,14 @@ pub struct WorldMap {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Position {
-    pub x: i32,
-    pub y: i32,
+    pub x: usize,
+    pub y: usize,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Velocity {
-    pub dx: i32,
-    pub dy: i32,
+    pub dx: usize,
+    pub dy: usize,
 }
 
 pub struct MotionProcess;
@@ -37,10 +37,20 @@ impl EntityProcess for MotionProcess {
                data: &mut DataHelper<WorldComponents, ()>) {
         for e in entities {
             let mut position = data.position[e];
-            let velocity = data.velocity[e];
-
-            position.x += velocity.dx;
-            position.y += velocity.dy;
+            let mut velocity = data.velocity[e];
+            // only move 1 space per update
+            if velocity.dx > 0 {
+                if position.x > 0 {
+                    position.x += 1;
+                }
+                velocity.dx -= 1;
+            }
+            if velocity.dy > 0 {
+                if position.y > 0 {
+                    position.y += 1;
+                }
+                velocity.dy -= 1;
+            }
             data.position[e] = position;
         }
     }
@@ -53,9 +63,53 @@ impl System for CommandProcess {
     type Services = ();
 }
 
-impl Process for CommandProcess {
-    fn process(&mut self, _: &mut DataHelper<WorldComponents, ()>) {
-        println!("{}", &self.0);
+impl EntityProcess for CommandProcess {
+    fn process(&mut self, 
+               entities: EntityIter<WorldComponents>,
+               data: &mut DataHelper<WorldComponents, ()>) {
+
+        let mut commands: Vec<&str> = self.0.split_whitespace()
+            .rev().collect();
+        let mut dx = 0;
+        let mut dy = 0;
+        while let Some(word) = commands.pop() {
+            match word {
+                "left" | "l" => {
+                    if let Some(val) = commands.pop() {
+                        if dx > 0 {
+                            dx -= val.parse::<usize>().unwrap_or(1);
+                        }
+                    }
+                },
+                "right" | "r" => {
+                    if let Some(val) = commands.pop() {
+                        if dx < usize::max_value() {
+                            dx += val.parse::<usize>().unwrap_or(1);
+                        }
+                    }
+                },
+                "up" | "u" => {
+                    if let Some(val) = commands.pop() {
+                        if dy < usize::max_value() {
+                            dy += val.parse::<usize>().unwrap_or(1);
+                        }
+                    }
+                },
+                "down" | "d" => {
+                    if let Some(val) = commands.pop() {
+                        if dy > 0 {
+                            dy -= val.parse::<usize>().unwrap_or(1);
+                        }
+                    }
+                },
+                _ => {},
+            }
+        }
+        for e in entities {
+            let mut velocity = data.velocity[e];
+            velocity.dx += dx;
+            velocity.dy += dy;
+        }
     }
 }
 
@@ -105,7 +159,10 @@ systems! {
                 RenderView,
                 aspect!(<WorldComponents> all: [world_map])
             ),
-            command: CommandProcess = CommandProcess("idle".to_string()),
+            command: EntitySystem<CommandProcess> = EntitySystem::new(
+                CommandProcess("idle".to_string()),
+                aspect!(<WorldComponents> all: [velocity]),
+            ),
         },
         passive: {}
     }
@@ -139,7 +196,7 @@ fn main() {
         let mut input = String::new();
         if let Ok(_) = io::stdin().read_line(&mut input) {
             world.systems.command.0 = input;
-            world.update();
         }
+        world.update();
     }
 }
