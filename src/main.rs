@@ -13,15 +13,20 @@ pub struct WorldMap {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Player {
+    pub avatar: char,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Position {
-    pub x: usize,
-    pub y: usize,
+    pub x: i64,
+    pub y: i64,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Velocity {
-    pub dx: usize,
-    pub dy: usize,
+    pub dx: i64,
+    pub dy: i64,
 }
 
 pub struct MotionProcess;
@@ -35,23 +40,14 @@ impl EntityProcess for MotionProcess {
     fn process(&mut self,
                entities: EntityIter<WorldComponents>,
                data: &mut DataHelper<WorldComponents, ()>) {
+        println!("Motion {}", entities.clone().count());
         for e in entities {
             let mut position = data.position[e];
-            let mut velocity = data.velocity[e];
-            // only move 1 space per update
-            if velocity.dx > 0 {
-                if position.x > 0 {
-                    position.x += 1;
-                }
-                velocity.dx -= 1;
-            }
-            if velocity.dy > 0 {
-                if position.y > 0 {
-                    position.y += 1;
-                }
-                velocity.dy -= 1;
-            }
+            let velocity = data.velocity[e];
+            position.x += velocity.dx;
+            position.y += velocity.dy;
             data.position[e] = position;
+            println!("{:?}", position);
         }
     }
 }
@@ -76,30 +72,30 @@ impl EntityProcess for CommandProcess {
             match word {
                 "left" | "l" => {
                     if let Some(val) = commands.pop() {
-                        if dx > 0 {
-                            dx -= val.parse::<usize>().unwrap_or(1);
-                        }
+                        dx -= val.parse::<i64>().unwrap_or(1);
+                    } else {
+                        dx -= 1;
                     }
                 },
                 "right" | "r" => {
                     if let Some(val) = commands.pop() {
-                        if dx < usize::max_value() {
-                            dx += val.parse::<usize>().unwrap_or(1);
-                        }
+                        dx += val.parse::<i64>().unwrap_or(1);
+                    } else {
+                        dx += 1;
                     }
                 },
                 "up" | "u" => {
                     if let Some(val) = commands.pop() {
-                        if dy < usize::max_value() {
-                            dy += val.parse::<usize>().unwrap_or(1);
-                        }
+                        dy += val.parse::<i64>().unwrap_or(1);
+                    } else {
+                        dy += 1;
                     }
                 },
                 "down" | "d" => {
                     if let Some(val) = commands.pop() {
-                        if dy > 0 {
-                            dy -= val.parse::<usize>().unwrap_or(1);
-                        }
+                        dy -= val.parse::<i64>().unwrap_or(1);
+                    } else {
+                        dy -= 1;
                     }
                 },
                 _ => {},
@@ -109,6 +105,8 @@ impl EntityProcess for CommandProcess {
             let mut velocity = data.velocity[e];
             velocity.dx += dx;
             velocity.dy += dy;
+            data.velocity[e] = velocity;
+            println!("{:?}", velocity);
         }
     }
 }
@@ -126,11 +124,17 @@ impl EntityProcess for RenderView {
                data: &mut DataHelper<WorldComponents, ()>) {
         for e in entities {
             let ref world_map = data.world_map[e];
+            let ref position = data.position[e];
+            let ref player = data.player[e];
             let height = world_map.height;
             let width = world_map.width;
             for i in 0..height {
                 for j in 0..width {
-                    print!("{}", world_map.map[i * width + j]);
+                    if i == position.x as usize && j == position.y as usize {
+                        print!("{}", player.avatar);
+                    } else {
+                        print!("{}", world_map.map[i * width + j]);
+                    }
                     if j == width - 1 {
                         println!("");
                     }
@@ -142,6 +146,7 @@ impl EntityProcess for RenderView {
 
 components! {
     struct WorldComponents {
+        #[hot] player: Player,
         #[hot] position: Position,
         #[hot] velocity: Velocity,
         #[hot] world_map: WorldMap,
@@ -153,11 +158,11 @@ systems! {
         active: {
             motion: EntitySystem<MotionProcess> = EntitySystem::new(
                 MotionProcess,
-                aspect!(<WorldComponents> all: [position, velocity])
+                aspect!(<WorldComponents> all: [position, velocity]),
             ),
             render: EntitySystem<RenderView> = EntitySystem::new(
                 RenderView,
-                aspect!(<WorldComponents> all: [world_map])
+                aspect!(<WorldComponents> all: [world_map, position]),
             ),
             command: EntitySystem<CommandProcess> = EntitySystem::new(
                 CommandProcess("idle".to_string()),
@@ -174,9 +179,7 @@ fn main() {
                                       data: &mut WorldComponents| {
         data.position.add(&entity, Position { x: 0, y: 0 });
         data.velocity.add(&entity, Velocity { dx: 0, dy: 0 });
-    });
-    let world_map = world.create_entity(|entity: BuildData<WorldComponents>,
-                                      data: &mut WorldComponents| {
+        data.player.add(&entity, Player { avatar: '😀' });
         let map_matrix = vec![
             '🌲', '🌲', '🌲', '🌳', '🌲', '🌲', '🌲', '🌲', '🌲', '🌲',
             '🌲',  '_',  '.',  '.',  '.',  '.',  '.',  '.',  '.', '🌲',
@@ -196,7 +199,7 @@ fn main() {
         let mut input = String::new();
         if let Ok(_) = io::stdin().read_line(&mut input) {
             world.systems.command.0 = input;
+            world.update();
         }
-        world.update();
     }
 }
