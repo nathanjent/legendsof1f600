@@ -184,8 +184,11 @@ fn main() {
     let mut lines = BufReader::new(f).lines();
     let height = 10;
     let width = 10;
-    let lines: Vec<String> = lines.filter_map(|line| line.ok())
+    let mut lines: Vec<String> = lines.filter_map(|line| line.ok())
                                   .collect();
+    let map_settings = lines.remove(0);
+    for word in map_settings.split_whitespace() {
+    }
     let map_vector: Vec<char> = lines.iter()
                                      .flat_map(|line| line.chars())
                                      .collect();
