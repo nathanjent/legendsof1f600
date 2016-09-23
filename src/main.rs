@@ -4,6 +4,9 @@ extern crate ecs;
 use ecs::{World, BuildData, DataHelper, EntityIter, ModifyData, Process, System};
 use ecs::system::{EntityProcess, EntitySystem};
 use std::io;
+use std::io::prelude::*;
+use std::io::BufReader;
+use std::fs::File;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct WorldMap {
@@ -60,12 +63,14 @@ impl System for CommandProcess {
 }
 
 impl EntityProcess for CommandProcess {
-    fn process(&mut self, 
+    fn process(&mut self,
                entities: EntityIter<WorldComponents>,
                data: &mut DataHelper<WorldComponents, ()>) {
 
-        let mut commands: Vec<&str> = self.0.split_whitespace()
-            .rev().collect();
+        let mut commands: Vec<&str> = self.0
+                                          .split_whitespace()
+                                          .rev()
+                                          .collect();
         let mut dx = 0;
         let mut dy = 0;
         while let Some(word) = commands.pop() {
@@ -76,29 +81,29 @@ impl EntityProcess for CommandProcess {
                     } else {
                         dx -= 1;
                     }
-                },
+                }
                 "right" | "r" => {
                     if let Some(val) = commands.pop() {
                         dx += val.parse::<i64>().unwrap_or(1);
                     } else {
                         dx += 1;
                     }
-                },
+                }
                 "up" | "u" => {
-                    if let Some(val) = commands.pop() {
-                        dy += val.parse::<i64>().unwrap_or(1);
-                    } else {
-                        dy += 1;
-                    }
-                },
-                "down" | "d" => {
                     if let Some(val) = commands.pop() {
                         dy -= val.parse::<i64>().unwrap_or(1);
                     } else {
                         dy -= 1;
                     }
-                },
-                _ => {},
+                }
+                "down" | "d" => {
+                    if let Some(val) = commands.pop() {
+                        dy += val.parse::<i64>().unwrap_or(1);
+                    } else {
+                        dy += 1;
+                    }
+                }
+                _ => {}
             }
         }
         for e in entities {
@@ -130,7 +135,7 @@ impl EntityProcess for RenderView {
             let width = world_map.width;
             for i in 0..height {
                 for j in 0..width {
-                    if i == position.x as usize && j == position.y as usize {
+                    if j == position.x as usize && i == position.y as usize {
                         print!("{}", player.avatar);
                     } else {
                         print!("{}", world_map.map[i * width + j]);
@@ -160,46 +165,51 @@ systems! {
                 MotionProcess,
                 aspect!(<WorldComponents> all: [position, velocity]),
             ),
-            render: EntitySystem<RenderView> = EntitySystem::new(
-                RenderView,
-                aspect!(<WorldComponents> all: [world_map, position]),
-            ),
             command: EntitySystem<CommandProcess> = EntitySystem::new(
                 CommandProcess("idle".to_string()),
                 aspect!(<WorldComponents> all: [velocity]),
             ),
         },
-        passive: {}
+        passive: {
+            render: EntitySystem<RenderView> = EntitySystem::new(
+                RenderView,
+                aspect!(<WorldComponents> all: [world_map, position]),
+            ),
+        }
     }
 }
 
 fn main() {
+    let f = File::open("map").expect("Map file missing");
+    let mut lines = BufReader::new(f).lines();
+    let height = 10;
+    let width = 10;
+    let lines: Vec<String> = lines.filter_map(|line| line.ok())
+                                  .collect();
+    let map_vector: Vec<char> = lines.iter()
+                                     .flat_map(|line| line.chars())
+                                     .collect();
+
     let mut world = World::<WorldSystems>::new();
     let entity = world.create_entity(|entity: BuildData<WorldComponents>,
                                       data: &mut WorldComponents| {
         data.position.add(&entity, Position { x: 0, y: 0 });
         data.velocity.add(&entity, Velocity { dx: 0, dy: 0 });
         data.player.add(&entity, Player { avatar: '😀' });
-        let map_matrix = vec![
-            '🌲', '🌲', '🌲', '🌳', '🌲', '🌲', '🌲', '🌲', '🌲', '🌲',
-            '🌲',  '_',  '.',  '.',  '.',  '.',  '.',  '.',  '.', '🌲',
-            '🌲',  '.',  '.',  '.',  '.',  '.',  '.',  '.',  '.', '🌲',
-            '🌲',  '.',  '.',  '.',  '.',  '.',  '.',  '.',  '.', '🌲',
-            '🌲',  '.',  '.',  '.',  '.',  '.',  '.',  '.',  '.', '🌲',
-            '🌲',  '.',  '.',  '.',  '.',  '🏠',  '.',  '.',  '.', '🌲',
-            '🌲',  '.',  '.',  '.',  '.',  '.',  '.',  '.',  '.', '🌲',
-            '🌲',  '.',  '.',  '.',  '.',  '.',  '.',  '.',  '.', '🌲',
-            '🌲',  '.',  '.',  '.',  '.',  '.',  '.',  '.',  '.', '🌲',
-            '🌲', '🌲', '🌲', '🌳', '🌲', '🌲', '🌲', '🌲', '🌲', '🌲'
-        ];
-        data.world_map.add(&entity, WorldMap { width: 10, height: 10, map: map_matrix });
+        data.world_map.add(&entity,
+                           WorldMap {
+                               width: width,
+                               height: height,
+                               map: map_vector,
+                           });
     });
 
     loop {
         let mut input = String::new();
         if let Ok(_) = io::stdin().read_line(&mut input) {
             world.systems.command.0 = input;
-            world.update();
+            process!(world, render);
         }
+        world.update();
     }
 }
