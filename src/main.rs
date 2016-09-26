@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate ecs;
 
-use ecs::{World, BuildData, DataHelper, EntityIter, ModifyData, Process, System};
+use ecs::{World, BuildData, DataHelper, EntityIter, System};
 use ecs::system::{EntityProcess, EntitySystem};
 use std::io;
 use std::io::prelude::*;
@@ -181,7 +181,7 @@ systems! {
 
 fn main() {
     let f = File::open("map").expect("Map file missing");
-    let mut lines = BufReader::new(f).lines();
+    let lines = BufReader::new(f).lines();
     let height = 10;
     let width = 10;
     let mut lines: Vec<String> = lines.filter_map(|line| line.ok())
