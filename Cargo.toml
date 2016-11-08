@@ -3,5 +3,8 @@ name = "legendsof1f600"
 version = "0.1.0"
 authors = ["Nathan Jent <nathanjent@gmail.com>"]
 
+[[bin]]
+name = "legendsof1f600"
+
 [dependencies]
-ecs = "0.*"
+specs = "0.*"
