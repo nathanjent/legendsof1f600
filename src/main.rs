@@ -158,7 +158,7 @@ fn main() {
             let (tiles, positions) = arg.fetch(|w| {
                 (w.read::<Tile>(), w.read::<Position>())
             });
-            let mut output = Vec::with_capacity(100);
+            let mut output = vec![' ';100];
 
             for (tile, position) in (&tiles, &positions).iter() {
                 println!("{:?} {:?}", tile, position);
