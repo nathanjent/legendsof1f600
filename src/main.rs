@@ -68,8 +68,8 @@ impl specs::Component for Velocity {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 struct Size {
-    w: u32,
-    h: u32,
+    w: i32,
+    h: i32,
 }
 
 impl specs::Component for Size {
@@ -109,7 +109,7 @@ fn main() {
 
         // Entities
         let _player = w.create_now()
-            .with(Tile { c: '😀' })
+            .with(Tile { c: 'X' })
             .with(Velocity { dx: 0, dy: 0 })
             .with(Position { x: 0, y: 0 })
             .with(PlayerController)
@@ -148,6 +148,7 @@ fn main() {
             for (mut p, v) in (&mut positions, &velocities).iter() {
                 p.x += v.dx;
                 p.y += v.dy;
+                println!("{:?}", p);
             }
         });
 
@@ -158,25 +159,16 @@ fn main() {
             let (tiles, positions) = arg.fetch(|w| {
                 (w.read::<Tile>(), w.read::<Position>())
             });
-            let mut output = vec![' ';100];
+            let mut output = vec![vec![' ';11];10];
 
             for (tile, position) in (&tiles, &positions).iter() {
-                println!("{:?} {:?}", tile, position);
-                output.insert((position.y * 10 + position.x) as usize, tile.c); 
+                //println!("{:?} {:?}", tile, position);
+                output[position.y as usize].insert(position.x as usize, tile.c); 
             }
-            //for x in 0..m.width {
-            //    for y in 0..m.height {
-            //        if x == p.x as i32 && y == p.y as i32 {
-            //        } else {
-            //            print!("{}", world_map.map[i * width + j]);
-            //        }
-            //        if j == width - 1 {
-            //            println!("");
-            //        }
-            //    }
-            //}
-            let output: String = output.into_iter().collect();
-            println!("{}", output);
+            for out in output {
+                let out: String = out.into_iter().collect();
+                println!("{}", out);
+            }
         });
 
         planner.wait();
@@ -200,8 +192,10 @@ fn main() {
                 for (_, size, entity) in (&views, &sizes, &entities).iter() {
                     let view_pos = positions.get_mut(entity)
                         .expect("render controller expect position component");
-                    view_pos.x = x - (size.w as i32 / 2);
-                    view_pos.y = y - (size.h as i32 / 2);
+                    let w = size.w / 2;
+                    let h = size.h / 2;
+                    if x > w { view_pos.x = x - (size.w / 2); }
+                    if y > h { view_pos.y = y - (size.h / 2); }
                 }
             }
         });
