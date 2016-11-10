@@ -30,15 +30,15 @@ struct RenderController;
 struct ImmovableController;
 
 impl specs::Component for PlayerController {
-    type Storage = specs::VecStorage<PlayerController >;
+    type Storage = specs::VecStorage<PlayerController>;
 }
 
 impl specs::Component for NonPlayerController {
-    type Storage = specs::VecStorage<NonPlayerController >;
+    type Storage = specs::VecStorage<NonPlayerController>;
 }
 
 impl specs::Component for RenderController {
-    type Storage = specs::VecStorage<RenderController >;
+    type Storage = specs::VecStorage<RenderController>;
 }
 
 impl specs::Component for ImmovableController {
@@ -140,6 +140,7 @@ fn main() {
         (specs::Planner::<()>::new(w, 4))
     };
     loop {
+        // update positions
         planner.run_custom(|arg| {
             let (mut positions, velocities) = arg.fetch(|w| {
                 (w.write::<Position>(), w.read::<Velocity>())
@@ -154,38 +155,11 @@ fn main() {
 
         planner.wait();
 
-        // render view
+        // update view area
         planner.run_custom(|arg| {
-            let (tiles, positions, players, map_objects) = arg.fetch(|w| {
-                (w.read::<Tile>(), w.read::<Position>(), w.read::<PlayerController>(),
-                w.read::<ImmovableController>())
-            });
-            let mut output = vec![vec![' ';10];10];
-
-            for (tile, position, _) in (&tiles, &positions, &map_objects).iter() {
-                //println!("{:?} {:?}", tile, position);
-                let _ = output[position.y as usize].remove(position.x as usize); 
-                output[position.y as usize].insert(position.x as usize, tile.c); 
-            }
-            for (tile, position, _) in (&tiles, &positions, &players).iter() {
-                //println!("{:?} {:?}", tile, position);
-                let _ = output[position.y as usize].remove(position.x as usize); 
-                output[position.y as usize].insert(position.x as usize, tile.c); 
-            }
-            for out in output {
-                let out: String = out.into_iter().collect();
-                println!("{}", out);
-            }
-        });
-
-        planner.wait();
-
-        // set view
-        planner.run_custom(|arg| {
-            let (mut positions, players, views, map_objects, sizes, entities) = arg.fetch(|w| {
+            let (mut positions, players, views, sizes, entities) = arg.fetch(|w| {
                 (w.write::<Position>(), w.read::<PlayerController>(), w.read::<RenderController>(),
-                w.read::<ImmovableController>(), w.read::<Size>(),
-                w.entities())
+                 w.read::<Size>(), w.entities())
             });
 
             let mut pos = (None, None);
@@ -207,6 +181,35 @@ fn main() {
             }
         });
             
+        planner.wait();
+
+        // render view
+        planner.run_custom(|arg| {
+            let (tiles, positions, non_players, players, map_objects) = arg.fetch(|w| {
+                (w.read::<Tile>(), w.read::<Position>(), w.read::<NonPlayerController>(),
+                w.read::<PlayerController>(), w.read::<ImmovableController>())
+            });
+            let mut output = vec![vec![' ';10];10];
+
+            // render in layers
+            for (tile, position, _) in (&tiles, &positions, &map_objects).iter() {
+                let _ = output[position.y as usize].remove(position.x as usize); 
+                output[position.y as usize].insert(position.x as usize, tile.c); 
+            }
+            for (tile, position, _) in (&tiles, &positions, &non_players).iter() {
+                let _ = output[position.y as usize].remove(position.x as usize); 
+                output[position.y as usize].insert(position.x as usize, tile.c); 
+            }
+            for (tile, position, _) in (&tiles, &positions, &players).iter() {
+                let _ = output[position.y as usize].remove(position.x as usize); 
+                output[position.y as usize].insert(position.x as usize, tile.c); 
+            }
+            for out in output {
+                let out: String = out.into_iter().collect();
+                println!("{}", out);
+            }
+        });
+
         // get input
         planner.run_custom(|arg| {
             let mut cmd = arg.fetch(|w| {
