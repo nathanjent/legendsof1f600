@@ -156,13 +156,20 @@ fn main() {
 
         // render view
         planner.run_custom(|arg| {
-            let (tiles, positions) = arg.fetch(|w| {
-                (w.read::<Tile>(), w.read::<Position>())
+            let (tiles, positions, players, map_objects) = arg.fetch(|w| {
+                (w.read::<Tile>(), w.read::<Position>(), w.read::<PlayerController>(),
+                w.read::<ImmovableController>())
             });
-            let mut output = vec![vec![' ';11];10];
+            let mut output = vec![vec![' ';10];10];
 
-            for (tile, position) in (&tiles, &positions).iter() {
+            for (tile, position, _) in (&tiles, &positions, &map_objects).iter() {
                 //println!("{:?} {:?}", tile, position);
+                let _ = output[position.y as usize].remove(position.x as usize); 
+                output[position.y as usize].insert(position.x as usize, tile.c); 
+            }
+            for (tile, position, _) in (&tiles, &positions, &players).iter() {
+                //println!("{:?} {:?}", tile, position);
+                let _ = output[position.y as usize].remove(position.x as usize); 
                 output[position.y as usize].insert(position.x as usize, tile.c); 
             }
             for out in output {
