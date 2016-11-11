@@ -1,10 +1,13 @@
 width=10 height=10 playable=[😀] blocking=[🌲,😀] nonblocking=[_,.,🏠,.]
-TTTTTTTTTT
-T........T
-T........T
-T....o...T
-T........T
-T........T
-T.....^===
-T........T
-TTTTTTTTTT
+TTTTTTTTTTTTTTTTTTTT
+T..................T
+T..................T
+T..................T
+T..................T
+T......^====H......T
+T...........|......T
+T...........m......T
+T...........t......T
+T..................T
+T..................T
+TTTTTTTTTTTTTTTTTTTT

@@ -24,7 +24,7 @@ struct PlayerController;
 struct NonPlayerController;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-struct RenderController;
+struct ViewController;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 struct ImmovableController;
@@ -37,8 +37,8 @@ impl specs::Component for NonPlayerController {
     type Storage = specs::VecStorage<NonPlayerController>;
 }
 
-impl specs::Component for RenderController {
-    type Storage = specs::VecStorage<RenderController>;
+impl specs::Component for ViewController {
+    type Storage = specs::VecStorage<ViewController>;
 }
 
 impl specs::Component for ImmovableController {
@@ -104,7 +104,7 @@ fn main() {
         w.register::<Velocity>();
         w.register::<PlayerController>();
         w.register::<NonPlayerController>();
-        w.register::<RenderController>();
+        w.register::<ViewController>();
         w.register::<ImmovableController>();
 
         // Entities
@@ -119,7 +119,7 @@ fn main() {
         let _view = w.create_now()
             .with(Position { x: 0, y: 0 })
             .with(Size { w: 10, h: 10 })
-            .with(RenderController)
+            .with(ViewController)
             .build();
 
         for (i, tile) in map.iter().enumerate() {
@@ -158,7 +158,7 @@ fn main() {
         // update view area
         planner.run_custom(|arg| {
             let (mut positions, players, views, sizes, entities) = arg.fetch(|w| {
-                (w.write::<Position>(), w.read::<PlayerController>(), w.read::<RenderController>(),
+                (w.write::<Position>(), w.read::<PlayerController>(), w.read::<ViewController>(),
                  w.read::<Size>(), w.entities())
             });
 
@@ -172,11 +172,19 @@ fn main() {
             if let (Some(x), Some(y)) = pos {
                 for (_, size, entity) in (&views, &sizes, &entities).iter() {
                     let view_pos = positions.get_mut(entity)
-                        .expect("render controller expect position component");
-                    let w = size.w / 2;
-                    let h = size.h / 2;
-                    if x > w { view_pos.x = x - (size.w / 2); }
-                    if y > h { view_pos.y = y - (size.h / 2); }
+                        .expect("view controller expect position component");
+                    if x > (size.w / 2) {
+                        view_pos.x = x - (size.w / 2);
+                    } else {
+                        view_pos.x = x;
+                    }
+                    if y > (size.h / 2) {
+                        view_pos.y = y - (size.h / 2);
+                    } else {
+                        view_pos.y = y;
+                    }
+                    println!("{:?}", view_pos);
+                    println!("{:?}", size);
                 }
             }
         });
@@ -185,16 +193,32 @@ fn main() {
 
         // render view
         planner.run_custom(|arg| {
-            let (tiles, positions, non_players, players, map_objects) = arg.fetch(|w| {
+            let (tiles, positions, non_players, players, map_objects, views, sizes) = arg.fetch(|w| {
                 (w.read::<Tile>(), w.read::<Position>(), w.read::<NonPlayerController>(),
-                w.read::<PlayerController>(), w.read::<ImmovableController>())
+                w.read::<PlayerController>(), w.read::<ImmovableController>(), w.read::<ViewController>(),
+                w.read::<Size>())
             });
             let mut output = vec![vec![' ';10];10];
 
+            let mut view_state = (None, None, None, None);
+            for (_, position, size) in (&views, &positions, &sizes).iter() {
+                view_state.0 = Some(position.x);
+                view_state.1 = Some(position.y);
+                view_state.2 = Some(size.w);
+                view_state.3 = Some(size.h);
+                break;
+            }
+
             // render in layers
-            for (tile, position, _) in (&tiles, &positions, &map_objects).iter() {
-                let _ = output[position.y as usize].remove(position.x as usize); 
-                output[position.y as usize].insert(position.x as usize, tile.c); 
+            if let (Some(x), Some(y), Some(width), Some(height)) = view_state {
+                for (tile, position, _) in (&tiles, &positions, &map_objects).iter() {
+                    if position.x >= x && position.x < x + width {
+                        if position.y >= y && position.y < y + height {
+                            let _ = output[position.y as usize].remove(position.x as usize); 
+                            output[position.y as usize].insert(position.x as usize, tile.c); 
+                        }
+                    }
+                }
             }
             for (tile, position, _) in (&tiles, &positions, &non_players).iter() {
                 let _ = output[position.y as usize].remove(position.x as usize); 
