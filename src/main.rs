@@ -1,12 +1,14 @@
 extern crate specs;
+extern crate yaml_rust;
 
 use specs::Join;
 use std::io::prelude::*;
 use std::io;
 use std::io::BufReader;
 use std::fs::File;
+use yaml_rust::{Yaml, YamlLoader, };
 
-static MAP: &'static str = include_str!("../map");
+static MAP: &'static str = include_str!("../map.yaml");
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 struct Tile {
@@ -47,8 +49,8 @@ impl specs::Component for ImmovableController {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 struct Position {
-    x: i32,
-    y: i32,
+    x: i64,
+    y: i64,
 }
 
 impl specs::Component for Position {
@@ -57,8 +59,8 @@ impl specs::Component for Position {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 struct Velocity {
-    dx: i32,
-    dy: i32,
+    dx: i64,
+    dy: i64,
 }
 
 impl specs::Component for Velocity {
@@ -68,8 +70,8 @@ impl specs::Component for Velocity {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 struct Size {
-    w: i32,
-    h: i32,
+    w: i64,
+    h: i64,
 }
 
 impl specs::Component for Size {
@@ -88,13 +90,46 @@ struct Command(String);
 //
 //#[cfg(feature="parallel")]
 fn main() {
-    let map_width = 10;
-    let height = 10;
-    let mut lines: Vec<&str> = MAP.lines().collect();
-    let map_settings = lines.remove(0);
-    for word in map_settings.split_whitespace() {
+    let ref map_cfg = YamlLoader::load_from_str(MAP).unwrap()[0];
+    //println!("{:?}", map_cfg);
+    let map_width = map_cfg["width"].as_i64().unwrap_or(3);
+    let map_height = map_cfg["height"].as_i64().unwrap_or(3);
+    let default_map = vec![Yaml::from_str("[
+            'T','T', 'T',
+            'T','.', 'T',
+            'T','T', 'T'
+    ]")];
+    let map: Vec<char> = map_cfg["world_map"].as_vec()
+        .unwrap_or(&default_map)
+        .iter()
+        .flat_map(Yaml::as_str)
+        .flat_map(str::chars)
+        .collect();
+
+    let playable: Vec<char> = map_cfg["playable"].as_vec()
+        .unwrap_or(&vec![Yaml::from_str("'X'")])
+        .iter()
+        .flat_map(Yaml::as_str)
+        .flat_map(str::chars)
+        .collect();
+
+    let blocking: Vec<char> = map_cfg["blocking"].as_vec()
+        .unwrap_or(&vec![Yaml::from_str("'T'")])
+        .iter()
+        .flat_map(Yaml::as_str)
+        .flat_map(str::chars)
+        .collect();
+
+    let nonblocking: Vec<char> = map_cfg["nonblocking"].as_vec()
+        .unwrap_or(&vec![Yaml::from_str("'.'")])
+        .iter()
+        .flat_map(Yaml::as_str)
+        .flat_map(str::chars)
+        .collect();
+
+    for c in blocking {
+        println!("{}", c);
     }
-    let map: Vec<char> = lines.iter().flat_map(|line| line.chars()).collect();
 
     let mut planner = {
         let mut w = specs::World::new();
@@ -126,7 +161,7 @@ fn main() {
             let _map_tile = w.create_now()
                 .with(ImmovableController)
                 .with(Size { w: 1, h: 1 })
-                .with(Position { x: i as i32 % map_width, y: i as i32 / map_width, })
+                .with(Position { x: i as i64 % map_width, y: i as i64 / map_width, })
                 .with(Tile { c: tile.clone() })
                 .build();
         }
@@ -266,28 +301,28 @@ fn main() {
                     match word {
                         "left" | "l" => {
                             if let Some(val) = commands.pop() {
-                                dx -= val.parse::<i32>().unwrap_or(1);
+                                dx -= val.parse::<i64>().unwrap_or(1);
                             } else {
                                 dx -= 1;
                             }
                         }
                         "right" | "r" => {
                             if let Some(val) = commands.pop() {
-                                dx += val.parse::<i32>().unwrap_or(1);
+                                dx += val.parse::<i64>().unwrap_or(1);
                             } else {
                                 dx += 1;
                             }
                         }
                         "up" | "u" => {
                             if let Some(val) = commands.pop() {
-                                dy -= val.parse::<i32>().unwrap_or(1);
+                                dy -= val.parse::<i64>().unwrap_or(1);
                             } else {
                                 dy -= 1;
                             }
                         }
                         "down" | "d" => {
                             if let Some(val) = commands.pop() {
-                                dy += val.parse::<i32>().unwrap_or(1);
+                                dy += val.parse::<i64>().unwrap_or(1);
                             } else {
                                 dy += 1;
                             }

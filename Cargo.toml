@@ -8,3 +8,5 @@ name = "legendsof1f600"
 
 [dependencies]
 specs = "0.*"
+yaml-rust = "0.*"
+rustc-serialize = "0.*"
