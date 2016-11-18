@@ -6,7 +6,7 @@ use std::io::prelude::*;
 use std::io;
 use std::io::BufReader;
 use std::fs::File;
-use yaml_rust::{Yaml, YamlLoader, };
+use yaml_rust::{Yaml, YamlLoader};
 
 static MAP: &'static str = include_str!("../map.yaml");
 
@@ -78,20 +78,17 @@ impl specs::Component for Size {
     type Storage = specs::VecStorage<Size>;
 }
 
-#[derive(Clone, Debug, PartialEq)]
-struct WorldMap(Vec<char>);
-
 #[derive(Clone, Debug)]
 struct Command(String);
 
-//#[cfg(not(feature="parallel"))]
-//fn main() {
-//}
+// #[cfg(not(feature="parallel"))]
+// fn main() {
+// }
 //
-//#[cfg(feature="parallel")]
+// #[cfg(feature="parallel")]
 fn main() {
     let ref map_cfg = YamlLoader::load_from_str(MAP).unwrap()[0];
-    //println!("{:?}", map_cfg);
+    // println!("{:?}", map_cfg);
     let map_width = map_cfg["width"].as_i64().unwrap_or(3);
     let map_height = map_cfg["height"].as_i64().unwrap_or(3);
     let default_map = vec![Yaml::from_str("[
@@ -99,33 +96,37 @@ fn main() {
             'T','.', 'T',
             'T','T', 'T'
     ]")];
-    let map: Vec<char> = map_cfg["world_map"].as_vec()
-        .unwrap_or(&default_map)
-        .iter()
-        .flat_map(Yaml::as_str)
-        .flat_map(str::chars)
-        .collect();
+    let map: Vec<char> = map_cfg["world_map"]
+                             .as_vec()
+                             .unwrap_or(&default_map)
+                             .iter()
+                             .flat_map(Yaml::as_str)
+                             .flat_map(str::chars)
+                             .collect();
 
-    let playable: Vec<char> = map_cfg["playable"].as_vec()
-        .unwrap_or(&vec![Yaml::from_str("'X'")])
-        .iter()
-        .flat_map(Yaml::as_str)
-        .flat_map(str::chars)
-        .collect();
+    let playable: Vec<char> = map_cfg["playable"]
+                                  .as_vec()
+                                  .unwrap_or(&vec![Yaml::from_str("'X'")])
+                                  .iter()
+                                  .flat_map(Yaml::as_str)
+                                  .flat_map(str::chars)
+                                  .collect();
 
-    let blocking: Vec<char> = map_cfg["blocking"].as_vec()
-        .unwrap_or(&vec![Yaml::from_str("'T'")])
-        .iter()
-        .flat_map(Yaml::as_str)
-        .flat_map(str::chars)
-        .collect();
+    let blocking: Vec<char> = map_cfg["blocking"]
+                                  .as_vec()
+                                  .unwrap_or(&vec![Yaml::from_str("'T'")])
+                                  .iter()
+                                  .flat_map(Yaml::as_str)
+                                  .flat_map(str::chars)
+                                  .collect();
 
-    let nonblocking: Vec<char> = map_cfg["nonblocking"].as_vec()
-        .unwrap_or(&vec![Yaml::from_str("'.'")])
-        .iter()
-        .flat_map(Yaml::as_str)
-        .flat_map(str::chars)
-        .collect();
+    let nonblocking: Vec<char> = map_cfg["nonblocking"]
+                                     .as_vec()
+                                     .unwrap_or(&vec![Yaml::from_str("'.'")])
+                                     .iter()
+                                     .flat_map(Yaml::as_str)
+                                     .flat_map(str::chars)
+                                     .collect();
 
     for c in blocking {
         println!("{}", c);
@@ -144,26 +145,43 @@ fn main() {
 
         // Entities
         let _player = w.create_now()
-            .with(Tile { c: 'X' })
-            .with(Velocity { dx: 0, dy: 0 })
-            .with(Position { x: 0, y: 0 })
-            .with(PlayerController)
-            .with(Size { w: 1, h: 1 })
-            .build();
+                       .with(Tile { c: 'X' })
+                       .with(Velocity { dx: 0, dy: 0 })
+                       .with(Position { x: 0, y: 0 })
+                       .with(PlayerController)
+                       .build();
+
+        let _star = w.create_now()
+                     .with(Tile { c: '*' })
+                     .with(Velocity { dx: 0, dy: 0 })
+                     .with(Position { x: 3, y: 3 })
+                     .with(NonPlayerController)
+                     .build();
 
         let _view = w.create_now()
-            .with(Position { x: 0, y: 0 })
-            .with(Size { w: 10, h: 10 })
-            .with(ViewController)
-            .build();
+                     .with(Position { x: 0, y: 0 })
+                     .with(Size { w: 10, h: 10 })
+                     .with(ViewController)
+                     .build();
+
+        let _map_view = w.create_now()
+                         .with(Size {
+                             w: map_width,
+                             h: map_height,
+                         })
+                         .with(ImmovableController)
+                         .build();
 
         for (i, tile) in map.iter().enumerate() {
             let _map_tile = w.create_now()
-                .with(ImmovableController)
-                .with(Size { w: 1, h: 1 })
-                .with(Position { x: i as i64 % map_width, y: i as i64 / map_width, })
-                .with(Tile { c: tile.clone() })
-                .build();
+                             .with(ImmovableController)
+                             .with(Size { w: 1, h: 1 })
+                             .with(Position {
+                                 x: i as i64 % map_width,
+                                 y: i as i64 / map_width,
+                             })
+                             .with(Tile { c: tile.clone() })
+                             .build();
         }
 
         // resources can be installed, these are nothing fancy, but allow you
@@ -192,47 +210,71 @@ fn main() {
 
         // update view area
         planner.run_custom(|arg| {
-            let (mut positions, players, views, sizes, entities) = arg.fetch(|w| {
-                (w.write::<Position>(), w.read::<PlayerController>(), w.read::<ViewController>(),
-                 w.read::<Size>(), w.entities())
+            let (mut positions, players, views, maps, sizes, entities) = arg.fetch(|w| {
+                (w.write::<Position>(),
+                 w.read::<PlayerController>(),
+                 w.read::<ViewController>(),
+                 w.read::<ImmovableController>(),
+                 w.read::<Size>(),
+                 w.entities())
             });
 
-            let mut pos = (None, None);
+            let mut player_pos = (None, None);
             for (_, position) in (&players, &positions).iter() {
-                pos.0 = Some(position.x);
-                pos.1 = Some(position.y);
+                player_pos.0 = Some(position.x);
+                player_pos.1 = Some(position.y);
                 break;
             }
 
-            if let (Some(x), Some(y)) = pos {
-                for (_, size, entity) in (&views, &sizes, &entities).iter() {
-                    let view_pos = positions.get_mut(entity)
-                        .expect("view controller expect position component");
-                    if x > (size.w / 2) {
+            let mut map_size = (None, None);
+            for (_, size) in (&maps, &sizes).iter() {
+                map_size.0 = Some(size.w);
+                map_size.1 = Some(size.h);
+                break;
+            }
+
+            if let (Some(x), Some(y)) = player_pos {
+                if let (Some(w), Some(h)) = map_size {
+                    for (_, size, entity) in (&views, &sizes, &entities).iter() {
+                        let view_pos = positions.get_mut(entity)
+                                                .expect("view controller expect position \
+                                                         component");
                         view_pos.x = x - (size.w / 2);
-                    } else {
-                        view_pos.x = x;
-                    }
-                    if y > (size.h / 2) {
                         view_pos.y = y - (size.h / 2);
-                    } else {
-                        view_pos.y = y;
+
+                        while view_pos.x < 0 {
+                            view_pos.x += 1;
+                        }
+                        while view_pos.x > w {
+                            view_pos.x -= 1;
+                        }
+                        while view_pos.y < 0 {
+                            view_pos.y += 1;
+                        }
+                        while view_pos.y > h {
+                            view_pos.y -= 1;
+                        }
+                        println!("{:?}", view_pos);
+                        println!("{:?}", size);
                     }
-                    println!("{:?}", view_pos);
-                    println!("{:?}", size);
                 }
             }
         });
-            
+
         planner.wait();
 
         // render view
         planner.run_custom(|arg| {
-            let (tiles, positions, non_players, players, map_objects, views, sizes) = arg.fetch(|w| {
-                (w.read::<Tile>(), w.read::<Position>(), w.read::<NonPlayerController>(),
-                w.read::<PlayerController>(), w.read::<ImmovableController>(), w.read::<ViewController>(),
-                w.read::<Size>())
-            });
+            let (tiles, positions, non_players, players, map_objects, views, sizes) =
+                arg.fetch(|w| {
+                    (w.read::<Tile>(),
+                     w.read::<Position>(),
+                     w.read::<NonPlayerController>(),
+                     w.read::<PlayerController>(),
+                     w.read::<ImmovableController>(),
+                     w.read::<ViewController>(),
+                     w.read::<Size>())
+                });
             let mut output = vec![vec![' ';10];10];
 
             let mut view_state = (None, None, None, None);
@@ -247,21 +289,26 @@ fn main() {
             // render in layers
             if let (Some(x), Some(y), Some(width), Some(height)) = view_state {
                 for (tile, position, _) in (&tiles, &positions, &map_objects).iter() {
-                    if position.x >= x && position.x < x + width {
-                        if position.y >= y && position.y < y + height {
-                            let _ = output[position.y as usize].remove(position.x as usize); 
-                            output[position.y as usize].insert(position.x as usize, tile.c); 
-                        }
+                    if position.x >= x && position.x < x + width && position.y >= y &&
+                       position.y < y + height {
+                        let _ = output[position.y as usize].remove(position.x as usize);
+                        output[position.y as usize].insert(position.x as usize, tile.c);
                     }
                 }
-            }
-            for (tile, position, _) in (&tiles, &positions, &non_players).iter() {
-                let _ = output[position.y as usize].remove(position.x as usize); 
-                output[position.y as usize].insert(position.x as usize, tile.c); 
-            }
-            for (tile, position, _) in (&tiles, &positions, &players).iter() {
-                let _ = output[position.y as usize].remove(position.x as usize); 
-                output[position.y as usize].insert(position.x as usize, tile.c); 
+                for (tile, position, _) in (&tiles, &positions, &non_players).iter() {
+                    if position.x >= x && position.x < x + width && position.y >= y &&
+                       position.y < y + height {
+                        let _ = output[position.y as usize].remove(position.x as usize);
+                        output[position.y as usize].insert(position.x as usize, tile.c);
+                    }
+                }
+                for (tile, position, _) in (&tiles, &positions, &players).iter() {
+                    if position.x >= x && position.x < x + width && position.y >= y &&
+                       position.y < y + height {
+                        let _ = output[position.y as usize].remove(position.x as usize);
+                        output[position.y as usize].insert(position.x as usize, tile.c);
+                    }
+                }
             }
             for out in output {
                 let out: String = out.into_iter().collect();
@@ -271,9 +318,7 @@ fn main() {
 
         // get input
         planner.run_custom(|arg| {
-            let mut cmd = arg.fetch(|w| {
-                (w.write_resource::<Command>())
-            });
+            let mut cmd = arg.fetch(|w| (w.write_resource::<Command>()));
             let mut input = String::new();
             if let Ok(_) = io::stdin().read_line(&mut input) {
                 cmd.0 = input;
@@ -285,16 +330,19 @@ fn main() {
         // process input
         planner.run_custom(|arg| {
             let (mut velocities, players, cmds, entities) = arg.fetch(|w| {
-                (w.write::<Velocity>(), w.read::<PlayerController>(), 
-                 w.read_resource::<Command>(), w.entities())
+                (w.write::<Velocity>(),
+                 w.read::<PlayerController>(),
+                 w.read_resource::<Command>(),
+                 w.entities())
             });
-            let mut commands: Vec<&str> = cmds.0.split_whitespace()
-                .rev()
-                .collect();
+            let mut commands: Vec<&str> = cmds.0
+                                              .split_whitespace()
+                                              .rev()
+                                              .collect();
 
             for (_, entity) in (&players, &entities).iter() {
                 let velocity = velocities.get_mut(entity)
-                    .expect("player controller expect velocity");
+                                         .expect("player controller expect velocity");
                 let mut dx = 0;
                 let mut dy = 0;
                 while let Some(word) = commands.pop() {
