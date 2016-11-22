@@ -1,7 +1,8 @@
 #!/usr/bin/env python
+# coding: utf-8
 
 import sys, ctypes
-from ctypes import c_void_p, c_uint8
+from ctypes import c_void_p, c_uint8, c_uint32, c_char_p
 
 prefix = {'win32': ''}.get(sys.platform, 'lib')
 extension = {'darwin': '.dylib', 'win32': '.dll'}.get(sys.platform, '.so')
@@ -19,4 +20,9 @@ def themeSongGenerate(count):
   finally:
     lib.theme_song_free(ptr)
 
-print themeSongGenerate(5)
+print themeSongGenerate(8)
+
+lib.how_many_characters.argtypes = (c_char_p,)
+lib.how_many_characters.restype = c_uint32
+
+print lib.how_many_characters("Windows doesn't like unicode.".encode('utf-8'))

@@ -2,9 +2,10 @@ extern crate libc;
 extern crate specs;
 extern crate yaml_rust;
 
-use libc::{c_char, uint8_t};
-use std::ffi::CString;
+use libc::{c_char, uint8_t, uint32_t};
+use std::ffi::{CStr, CString};
 use std::iter;
+use std::str;
 
 use specs::Join;
 use std::io::prelude::*;
@@ -33,6 +34,18 @@ pub extern "C" fn theme_song_free(s: *mut c_char) {
         }
         CString::from_raw(s)
     };
+}
+
+#[no_mangle]
+pub extern fn how_many_characters(s: *const c_char) -> uint32_t {
+    let c_str = unsafe {
+        assert!(!s.is_null());
+
+        CStr::from_ptr(s)
+    };
+
+    let r_str = c_str.to_str().unwrap();
+    r_str.chars().count() as uint32_t
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
