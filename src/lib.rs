@@ -18,9 +18,9 @@ static MAP: &'static str = include_str!("../map.yaml");
 
 #[no_mangle]
 pub extern "C" fn theme_song_generate(length: uint8_t) -> *mut c_char {
-    let mut song = String::from("<lyrics>");
+    let mut song = String::from("💣 ");
     song.extend(iter::repeat("na ").take(length as usize));
-    song.push_str("Batman!</lyrics>");
+    song.push_str("Batman! 💣");
 
     let c_str_song = CString::new(song).unwrap();
     c_str_song.into_raw()
