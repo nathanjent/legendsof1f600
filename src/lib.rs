@@ -48,6 +48,20 @@ pub extern fn how_many_characters(s: *const c_char) -> uint32_t {
     r_str.chars().count() as uint32_t
 }
 
+
+#[no_mangle]
+pub extern fn process_command(s: *const c_char, cb: extern fn(*const c_char)) {
+    let c_str = unsafe {
+        assert!(!s.is_null());
+
+        CStr::from_ptr(s)
+    };
+
+    let cmd = c_str.to_str().unwrap();
+    let c_str_rep = CString::new(cmd).unwrap();
+    cb(c_str_rep.into_raw());
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 struct Tile {
     c: char,

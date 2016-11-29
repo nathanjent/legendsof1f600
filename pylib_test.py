@@ -2,7 +2,7 @@
 # coding: utf-8
 
 import sys, ctypes
-from ctypes import c_void_p, c_uint8, c_uint32, c_char_p
+from ctypes import c_void_p, c_uint8, c_uint32, c_char_p, CFUNCTYPE, POINTER, WINFUNCTYPE
 
 prefix = {'win32': ''}.get(sys.platform, 'lib')
 extension = {'darwin': '.dylib', 'win32': '.dll'}.get(sys.platform, '.so')
@@ -26,3 +26,20 @@ lib.how_many_characters.argtypes = (c_char_p,)
 lib.how_many_characters.restype = c_uint32
 
 print lib.how_many_characters("Windows doesn't like unicode.".encode('utf-8'))
+
+
+#lib.process_command.argtypes = (c_char_p, POINTER(c_char_p))
+lib.process_command.restype = None
+
+CB = CFUNCTYPE(c_uint8, POINTER(c_char_p))
+
+def py_cb(result):
+  print ctypes.cast(result, ctypes.c_char_p).value.decode('utf-8')
+  return 0
+
+cb_func = CB(py_cb)
+
+def processCommand(cmd, callback):
+  lib.process_command(cmd.encode('utf-8'), callback)
+
+processCommand("Holla back!", cb_func)
