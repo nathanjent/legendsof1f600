@@ -7,6 +7,11 @@ authors = ["Nathan Jent <nathanjent@gmail.com>"]
 name = "legendsof1f600"
 
 [dependencies]
-specs = "0.*"
-yaml-rust = "0.*"
-rustc-serialize = "0.*"
+specs = "0.7.0"
+yaml-rust = "0.3.4"
+rustc-serialize = "0.3.21"
+iron = "*"
+router = "*"
+rouille = "1.0.1"
+conduit-router = "0.8.0"
+route-recognizer = "0.1.11"
