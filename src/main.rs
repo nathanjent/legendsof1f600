@@ -1,61 +1,57 @@
-extern crate iron;
+extern crate conduit_router;
+extern crate conduit;
+extern crate semver;
 #[macro_use]
-extern crate rouille;
-extern crate route_recognizer;
-#[macro_use]
-extern crate router;
 extern crate specs;
 extern crate yaml_rust;
 
-use iron::prelude::*;
-use iron::status;
-use router::Router;
-//use rouille::Server;
-//use rouille::Response;
-//use route_recognizer::{Router};
+use conduit_router::{RequestParams, RouteBuilder};
+use conduit::{Handler, Method, Scheme, Host, Headers, Extensions, TypeMap};
+use std::collections::HashMap;
+use std::env;
+use std::io;
+use std::net::SocketAddr;
 
 mod world;
 
 fn main() {
-    let url = ::std::env::var("URL").unwrap_or("/".to_string());
-    let remote_addr = ::std::env::var("REMOTE_ADDR").unwrap_or("127.0.0.1:8080".to_string());
-    let local_addr = ::std::env::var("LOCAL_ADDR").unwrap_or("127.0.0.1:8080".to_string());
-    let headers_str = ::std::env::var("URL").unwrap_or("/".to_string());
-    let body = ::std::env::var("URL").unwrap_or("/".to_string());
-    let method = ::std::env::var("URL").unwrap_or("/".to_string());
-    let type_map_str = ::std::env::var("URL").unwrap_or("/".to_string());
+    let url = env::var("REQUEST_URI").unwrap_or("/".to_string());
+    let remote_addr = env::var("REMOTE_ADDR").unwrap_or("127.0.0.1:80".to_string());
+    let local_addr = env::var("SERVER_ADDR").unwrap_or("127.0.0.1:80".to_string());
+    let headers_str = env::var("URL").unwrap_or("/".to_string());
+    let body = env::var("URL").unwrap_or("/".to_string());
+    let method_str = env::var("REQUEST_METHOD").unwrap_or("OPTIONS".to_string());
+    let type_map_str = env::var("URL").unwrap_or("/".to_string());
 
-    let mut headers = Headers::new();
-    let mut type_map = TypeMap::new();
-
-//    let server = Server::new("localhost:0", |request| {
-//        Response::text(format!("hello world {:?}", request.method()))
-//    }).unwrap();
-//    server.poll();
-
-    let mut req = Request {
-        url: Url::parse(url).unwrap(),
-        remote_addr: SocketAddr::from_str(remote_addr).unwrap(),
-        local_addr: SocketAddr::from_str(local_addr).unwrap(),
-        headers: Headers,
-        body: Body<'a, 'b>,
-        method: Method::from_str(method).unwrap(),
-        extensions: TypeMap,
+    let method = match &*method_str {
+        "GET" => Method::Get,
+        "POST" => Method::Post,
+        "PUT" => Method::Put,
+        "DELETE" => Method::Delete,
+        "HEAD" => Method::Head,
+        "OPTIONS" => Method::Options,
+        s @ _ => Method::Other(s.to_string()),
     };
 
-    let router = router!(index: get "/" => handler,
-                         query: get "/:query" => handler);
+    let mut router = RouteBuilder::new();
+    router.get("/", handler);
+    router.map(Method::Options, "/", handler);
 
-    fn handler(req: &mut Request) -> IronResult<Response> {
-        let ref query = req.extensions.get::<Router>().unwrap().find("query").unwrap_or("/");
-        Ok(Response::with((status::Ok, *query)))
-    }
+    let m = router.recognize(&method, &*url).unwrap();
 
-    //let mut router = Router::new();
-    //router.add("/", "ContentType: text/html; charset=UTF-8\n\nHello World!");
+    println!("{:?}", m.params);
 
-    //let m = router.recognize(&*url).unwrap();
-
-    //println!("{}", m.handler);
     ::std::process::exit(0);
+}
+
+fn handler(req: &mut conduit::Request) -> io::Result<conduit::Response> {
+    let mut res = vec!();
+    res.push(req.params()["id"].clone());
+    res.push(format!("{:?}", req.method()));
+
+    Ok(conduit::Response {
+        status: (200, "OK"),
+        headers: HashMap::new(),
+        body: Box::new(io::Cursor::new(res.connect(", ").into_bytes()))
+    })
 }
