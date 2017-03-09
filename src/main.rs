@@ -4,28 +4,40 @@ extern crate rouille;
 #[macro_use]
 extern crate specs;
 extern crate yaml_rust;
+#[macro_use]
+extern crate serde_derive;
+extern crate dotenv;
+extern crate envy;
 
+use dotenv::dotenv;
 use rouille::{Request};
 
-use std::env;
-use std::net::SocketAddr;
-use std::io::{self, Write};
 use std::ascii::AsciiExt;
+use std::env;
+use std::io::{self, Read, Write};
+use std::net::SocketAddr;
 
 mod world;
 
-struct RequestBuilder {
-        method: String,
-        url: String,
-        headers: Vec<(String, String)>,
-        https: bool,
-        remote_addr: SocketAddr,
+#[derive(Deserialize, Debug)]
+struct CGIRequest {
+    request_method: String,
+    request_uri: String,
+    headers: Vec<(String, String)>,
+    #[serde(rename = "HTTP_UPGRADE_INSECURE_REQUESTS")]
+    https: bool,
+    remote_addr: SocketAddr,
 }
 
 fn main() {
-    let mut req_builder = RequestBuilder {
-        method: "OPTIONS".into(),
-        url: "/".into(),
+    dotenv::dotenv().ok();
+    match envy::from_env::<CGIRequest>() {
+       Ok(config) => println!("{:#?}", config),
+       Err(error) => panic!("{:#?}", error),
+    }
+    let mut req_builder = CGIRequest {
+        request_method: "OPTIONS".into(),
+        request_uri: "/".into(),
         headers: Vec::new(),
         https: false,
         remote_addr: "127.0.0.1:80".parse().unwrap(),
@@ -40,8 +52,8 @@ fn main() {
             .map(|c| c as u8).collect::<Vec<u8>>();
         tiny_http::HTTPVersion(version[0], version[1]);
     }
-    "REQUEST_METHOD" => req_builder.method = v,
-    "REQUEST_URI" => req_builder.url = v,
+    "REQUEST_METHOD" => req_builder.request_method = v,
+    "REQUEST_URI" => req_builder.request_uri = v,
     "REMOTE_ADDR" => req_builder.remote_addr = v.parse().unwrap(),
     _ => {},
         }
@@ -63,8 +75,8 @@ fn main() {
     // I know it's fake but I'm not sure how to build a request from environment variables
     let request = Request::fake_http_from(
         req_builder.remote_addr,
-        req_builder.method,
-        req_builder.url,
+        req_builder.request_method,
+        req_builder.request_uri,
         req_builder.headers,
         body.into(),
     );

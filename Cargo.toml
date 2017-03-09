@@ -1,14 +1,18 @@
 [package]
+authors = ["Nathan Jent <nathanjent@gmail.com>"]
 name = "legendsof1f600"
 version = "0.1.0"
-authors = ["Nathan Jent <nathanjent@gmail.com>"]
 
 [[bin]]
 name = "legendsof1f600"
 
 [dependencies]
-specs = "0.7.0"
-yaml-rust = "0.3.4"
-rustc-serialize = "0.3.21"
+dotenv = "0.8.0"
+envy = "0.2.0"
 rouille = "1.0.1"
+rustc-serialize = "0.3.21"
+serde = "0.9.11"
+serde_derive = "0.9.11"
+specs = "0.7.0"
 tiny_http = "0.5.6"
+yaml-rust = "0.3.4"
