@@ -10,6 +10,7 @@ use rouille::{Request};
 use std::env;
 use std::net::SocketAddr;
 use std::io::{self, Write};
+use std::ascii::AsciiExt;
 
 mod world;
 
@@ -33,7 +34,12 @@ fn main() {
     for (k, v) in env::vars() {
         //println!("{:?}: {:?}", k, v);
         match &*k {
-            "AUTH_TYPE" | "CONTENT_LENGTH" | "CONTENT_TYPE" | "GATEWAY_INTERFACE" | "PATH_INFO" | "PATH_TRANSLATED" | "QUERY_STRING" | "REMOTE_HOST" | "REMOTE_IDENT" | "REMOTE_USER" | "SCRIPT_NAME" | "SERVER_NAME" | "SERVER_PORT" | "SERVER_PROTOCOL" | "SERVER_SOFTWARE" => req_builder.headers.push((k, v)),
+            "AUTH_TYPE" | "CONTENT_LENGTH" | "CONTENT_TYPE" | "GATEWAY_INTERFACE" | "PATH_INFO" | "PATH_TRANSLATED" | "QUERY_STRING" | "REMOTE_HOST" | "REMOTE_IDENT" | "REMOTE_USER" | "SCRIPT_NAME" | "SERVER_NAME" | "SERVER_PORT" | "SERVER_SOFTWARE" => req_builder.headers.push((k, v)),
+    "SERVER_PROTOCOL" => {
+        let version = v.chars().filter(|c| !c.is_numeric())
+            .map(|c| c as u8).collect::<Vec<u8>>();
+        tiny_http::HTTPVersion(version[0], version[1]);
+    }
     "REQUEST_METHOD" => req_builder.method = v,
     "REQUEST_URI" => req_builder.url = v,
     "REMOTE_ADDR" => req_builder.remote_addr = v.parse().unwrap(),
@@ -54,7 +60,6 @@ fn main() {
 
     //    );
 
-                                             );
     // I know it's fake but I'm not sure how to build a request from environment variables
     let request = Request::fake_http_from(
         req_builder.remote_addr,
@@ -66,7 +71,7 @@ fn main() {
 
     let rouille_response = router!{request,
                           (GET) (/) => {
-                              rouille::Response::text("")
+                              rouille::Response::redirect_302("/hello")
                           },
                           (GET) (/hello) => {
                               rouille::Response::text("hello")
@@ -74,13 +79,14 @@ fn main() {
                           _ => rouille::Response::text("")
                       };
 
+    let mut upgrade_header = "".into();
 
     // writing the response
     let (res_data, res_len) = rouille_response.data.into_reader_and_size();
     let mut response = tiny_http::Response::empty(rouille_response.status_code)
         .with_data(res_data, res_len);
     let mut response_headers = Vec::new();
-    for (key, value) in req_builder.headers {
+    for (key, value) in request.headers() {
         if key.eq_ignore_ascii_case("Content-Length") {
             continue;
         }
@@ -98,15 +104,14 @@ fn main() {
     }
 
     let stdout = io::stdout();
-    let writer = stdout.lock();
+    let mut writer = stdout.lock();
     response.raw_print(
         writer,
-        HTTPVersion(1, 1),
-        response_headers,
+        tiny_http::HTTPVersion(1, 1),
+        &response_headers[..],
         true,
         None,
         );
-    writer.flush();
 
     ::std::process::exit(0);
 }
