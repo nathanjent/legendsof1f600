@@ -1,6 +1,6 @@
-extern crate tiny_http;
 #[macro_use]
 extern crate rouille;
+extern crate chrono;
 #[macro_use]
 extern crate specs;
 extern crate yaml_rust;
@@ -8,124 +8,191 @@ extern crate yaml_rust;
 extern crate serde_derive;
 extern crate dotenv;
 extern crate envy;
+#[macro_use] extern crate diesel;
+#[macro_use] extern crate diesel_codegen;
 
 use dotenv::dotenv;
+use std::io::{self, Read, Write};
+use std::panic;
+use std::time::{Duration, Instant};
 use rouille::Request;
+use rouille::Response;
+
+use diesel::prelude::*;
+use diesel::mysql::MysqlConnection;
 
 use std::ascii::AsciiExt;
 use std::env;
-use std::io::{self, Read, Write};
-use std::net::SocketAddr;
 
 mod world;
 
 #[derive(Deserialize, Debug)]
-struct CGIRequest {
+struct EnvRequest {
     #[serde(rename = "REQUEST_METHOD")]
-    method: String,
+    request_method: String,
+    #[serde(rename = "REQUEST_URI")]
     request_uri: String,
-    #[serde(default = "Vec::new")]
+    #[serde(rename = "REMOTE_ADDR")]
+    remote_addr: String,
+    #[serde(rename = "REMOTE_PORT")]
+    remote_port: u64,
+    #[serde(rename = "CONTENT_LENGTH", default)]
+    content_length: u64,
+    #[serde(default = "http_headers")]
     headers: Vec<(String, String)>,
-    #[serde(rename = "HTTP_UPGRADE_INSECURE_REQUESTS")]
+    #[serde(rename = "HTTP_UPGRADE_INSECURE_REQUESTS", default)]
     https: u8,
-    server_protocol: String,
-    remote_addr: SocketAddr,
 }
 
-fn into_http_version(version: String) -> tiny_http::HTTPVersion {
-    let v = version.chars().filter(|c| !c.is_numeric())
-        .map(|c| c as u8).collect::<Vec<u8>>();
-    tiny_http::HTTPVersion(v[0], v[1])
+fn http_headers() -> Vec<(String, String)> {
+    ::std::env::vars().filter_map(|(k, v)| {
+       match k.split("HTTP_").nth(1) {
+           Some(k) => Some((k.into(), v)),
+           None => None,
+       }
+    }).collect::<Vec<_>>()
 }
 
 fn main() {
-    dotenv::dotenv().ok();
-    match envy::from_env::<CGIRequest>() {
-       Ok(request) => println!("{:#?}", request),
-       Err(error) => panic!("{:#?}", error),
-    }
-    let mut cgi_request = CGIRequest {
-        method: "OPTIONS".into(),
-        request_uri: "/".into(),
-        headers: Vec::new(),
-        https: 0,
-        server_protocol: "HTTP/1.1".into(),
-        remote_addr: "127.0.0.1:80".parse().unwrap(),
+    dotenv().ok();
+    //println!("{:?}", ::std::env::vars().collect::<Vec<_>>());
+
+    let database_url = env::var("DATABASE_URL")
+                .expect("DATABASE_URL must be set");
+    let connection = MysqlConnection::establish(&database_url)
+            .expect(&format!("Error connecting to {}", database_url));
+
+    let status = match handle() {
+        Ok(_) => 0,
+        Err(e) => {
+            writeln!(io::stdout(), "Status: 500\r\n\r\n
+                     <h1>500 Internal Server Error</h1>
+                     <p>{}</p>", e)
+                .expect("Panic at write to STDOUT!");
+            1
+        }
+    };
+    ::std::process::exit(status);
+}
+
+fn handle() -> Result<(), Box<::std::error::Error>> {
+    // Deserialize request from environment variables
+    let request = envy::from_env::<EnvRequest>()?;
+    //println!("{:?}", request);
+
+    // Read request body from stdin
+    let mut data = Vec::new();
+    io::stdin().take(request.content_length).read_to_end(&mut data)?;
+
+    // Generate a Rouille Request from the EnvRequest and body data from STDIN
+    // These fake_http methods are most-likely for testing but serve our purposes.
+    let request = match request.https {
+        1 => Request::fake_https_from(
+            format!("{}:{}", request.remote_addr, request.remote_port).parse()?,
+            request.request_method,
+            request.request_uri,
+            request.headers,
+            data),
+        _ => Request::fake_http_from(
+            format!("{}:{}", request.remote_addr, request.remote_port).parse()?,
+            request.request_method,
+            request.request_uri,
+            request.headers,
+            data),
     };
 
-    for (k, v) in env::vars() {
-        //println!("{:?}: {:?}", k, v);
-        match &*k {
-            "AUTH_TYPE" | "CONTENT_LENGTH" | "CONTENT_TYPE" | "GATEWAY_INTERFACE" | "PATH_INFO" | "PATH_TRANSLATED" | "QUERY_STRING" | "REMOTE_HOST" | "REMOTE_IDENT" | "REMOTE_USER" | "SCRIPT_NAME" | "SERVER_NAME" | "SERVER_PORT" | "SERVER_SOFTWARE" => cgi_request.headers.push((k, v)),
-    _ => {},
+    // Route request 
+    let _response = router!(request,
+        // first route
+        (GET) (/) => {
+            // print the http headers from the request for fun!
+            let mut s = String::new();
+            for (k, v) in request.headers() {
+                s.push_str(&*format!("{}: {}\r\n", k, v));
+            }
+            Response::text(s)
+        },
+
+        // second route
+        (GET) (/hello) => {
+            Response::html("<p>Hello world</p>")
+        },
+
+        // ... other routes here ...
+
+        // default route
+        _ => {
+            Response::text("Default Space")
         }
-    }
-
-    // TODO get body
-    let body = String::new();
-
-    //let req = tiny_http::request::new_request(
-    //    false,
-    //    Method::from_str(cgi_request.method),
-    //    cgi_request.url,
-    //    HTTPVersion(1, 1),
-    //    cgi_request.headers,
-    //    cgi_request.remote_addr,
-
-    //    );
-
-    // I know it's fake but I'm not sure how to build a request from environment variables
-    let request = Request::fake_http_from(
-        cgi_request.remote_addr,
-        cgi_request.method,
-        cgi_request.request_uri,
-        cgi_request.headers,
-        body.into(),
     );
 
-    let rouille_response = router!{request,
-                          (GET) (/) => {
-                              rouille::Response::redirect_302("/hello")
-                          },
-                          (GET) (/hello) => {
-                              rouille::Response::text("hello")
-                          },
-                          _ => rouille::Response::text("")
-                      };
+    // Send resulting response after routing
+    send(&request, io::stdout(), || _response)?;
+    Ok(())
+}
 
-    let mut upgrade_header = "".into();
+/// Sends a response to STDOUT.
+///
+/// The CGI server receives the response through the pipe and sends it along.
+/// TODO this is a modified version of the rouille log function, does it need to catch panics?
+fn send<W, F>(rq: &Request, mut output: W, f: F)
+    -> Result<(), Box<::std::error::Error>>
+    where W: Write,
+          F: FnOnce() -> Response
+{
+    let start_instant = Instant::now();
+    let rq_line = format!("{} UTC - {} {}",
+                          chrono::UTC::now().format("%Y-%m-%d %H:%M:%S%.6f"),
+                          rq.method(),
+                          rq.raw_url());
 
-    // writing the response
-    let (res_data, res_len) = rouille_response.data.into_reader_and_size();
-    let mut response = tiny_http::Response::empty(rouille_response.status_code)
-        .with_data(res_data, res_len);
-    let mut response_headers = Vec::new();
-    for (key, value) in request.headers() {
-        if key.eq_ignore_ascii_case("Content-Length") {
-            continue;
+    // Calling the handler and catching potential panics.
+    // Note that this we always resume unwinding afterwards, we can ignore the small panic-safety
+    // mecanism of `catch_unwind`.
+    let response = panic::catch_unwind(panic::AssertUnwindSafe(f));
+
+    let elapsed_time = format_time(start_instant.elapsed());
+
+    match response {
+        Ok(response) => {
+            for &(ref k, ref v) in response.headers.iter() {
+                writeln!(output, "{}: {}", k, v)?;
+            }
+            //writeln!(output, "Status: {}", response.status_code)?;
+            let (mut response_body, content_length) = response.data.into_reader_and_size();
+            if let Some(content_length) = content_length {
+                writeln!(output, "Content-Length: {}",  content_length)?;
+            }
+            writeln!(output, "")?;
+            io::copy(&mut response_body, &mut output)?;
+            writeln!(output, "")?;
         }
-
-        if key.eq_ignore_ascii_case("Upgrade") {
-            upgrade_header = value;
-            continue;
-        }
-
-        if let Ok(header) = tiny_http::Header::from_bytes(key.as_bytes(), value.as_bytes()) {
-            response_headers.push(header);
-        } else {
-            // TODO: ?
+        Err(payload) => {
+            // There is probably no point in printing the payload, as this is done by the panic
+            // handler.
+            let _ = writeln!(output, "{} - {} - PANIC!", rq_line, elapsed_time);
+            panic::resume_unwind(payload);
         }
     }
+    Ok(())
+}
 
-    let stdout = io::stdout();
-    let mut writer = stdout.lock();
-    response.raw_print(
-        writer,
-        into_http_version(cgi_request.server_protocol),
-        &response_headers[..],
-        true,
-        None,
-        );
+// copied from the rouille log module
+fn format_time(duration: Duration) -> String {
+    let secs_part = match duration.as_secs().checked_mul(1_000_000_000) {
+        Some(v) => v,
+        None => return format!("{}s", duration.as_secs() as f64),
+    };
 
-    ::std::process::exit(0);
+    let duration_in_ns = secs_part + duration.subsec_nanos() as u64;
+
+    if duration_in_ns < 1_000 {
+        format!("{}ns", duration_in_ns)
+    } else if duration_in_ns < 1_000_000 {
+        format!("{:.1}us", duration_in_ns as f64 / 1_000.0)
+    } else if duration_in_ns < 1_000_000_000 {
+        format!("{:.1}ms", duration_in_ns as f64 / 1_000_000.0)
+    } else {
+        format!("{:.1}s", duration_in_ns as f64 / 1_000_000_000.0)
+    }
 }
