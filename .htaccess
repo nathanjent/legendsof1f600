@@ -1,5 +1,8 @@
 # loads index.cgi at root of site
 RewriteEngine On
-# Don't interfere with static files
+# If is not a file, load index.cgi
 RewriteCond %{REQUEST_FILENAME} !-f
-RewriteRule ^(.*)$ /index.cgi/$1 [L]
+RewriteRule ^(.*)$ /index.cgi/$1
+# If is a hidden file, forbid access
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^\..+$ - [F,L]
