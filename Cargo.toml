@@ -16,5 +16,6 @@ serde = "0.9.11"
 serde_derive = "0.9.11"
 specs = "0.7.0"
 yaml-rust = "0.3.4"
-diesel = { version = "0.12.0", features = ["mysql"] }
-diesel_codegen = { version = "0.12.0", features = ["mysql"] }
+#diesel = { version = "0.12.0", features = ["mysql"] }
+#diesel_codegen = { version = "0.12.0", features = ["mysql"] }
+mysql = "10.0.0"

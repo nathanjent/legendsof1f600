@@ -8,8 +8,12 @@ extern crate yaml_rust;
 extern crate serde_derive;
 extern crate dotenv;
 extern crate envy;
-#[macro_use] extern crate diesel;
-#[macro_use] extern crate diesel_codegen;
+//#[macro_use]
+//extern crate diesel;
+//#[macro_use]
+//extern crate diesel_codegen;
+#[macro_use]
+extern crate mysql;
 
 use dotenv::dotenv;
 use std::io::{self, Read, Write};
@@ -18,13 +22,20 @@ use std::time::{Duration, Instant};
 use rouille::Request;
 use rouille::Response;
 
-use diesel::prelude::*;
-use diesel::mysql::MysqlConnection;
+//use diesel::prelude::*;
+//use diesel::mysql::MysqlConnection;
 
 use std::ascii::AsciiExt;
 use std::env;
 
 mod world;
+
+#[derive(Debug, PartialEq, Eq)]
+struct Entity {
+    id: i32,
+    name: Option<String>,
+    health: i32,
+}
 
 #[derive(Deserialize, Debug)]
 struct EnvRequest {
@@ -57,17 +68,11 @@ fn main() {
     dotenv().ok();
     //println!("{:?}", ::std::env::vars().collect::<Vec<_>>());
 
-    let database_url = env::var("DATABASE_URL")
-                .expect("DATABASE_URL must be set");
-    let connection = MysqlConnection::establish(&database_url)
-            .expect(&format!("Error connecting to {}", database_url));
-
     let status = match handle() {
         Ok(_) => 0,
         Err(e) => {
             writeln!(io::stdout(), "Status: 500\r\n\r\n
-                     <h1>500 Internal Server Error</h1>
-                     <p>{}</p>", e)
+                     <h1>500 Internal Server Error</h1> <p>{}</p>", e)
                 .expect("Panic at write to STDOUT!");
             1
         }
@@ -79,6 +84,68 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
     // Deserialize request from environment variables
     let request = envy::from_env::<EnvRequest>()?;
     //println!("{:?}", request);
+
+    let database_url = env::var("DATABASE_URL")
+                .expect("DATABASE_URL must be set");
+    //let connection = MysqlConnection::establish(&database_url)
+    //        .expect(&format!("Error connecting to {}", database_url));
+
+    let pool = mysql::Pool::new(&*database_url)?;
+    pool.prep_exec(r"CREATE TEMPORARY TABLE tmp.entity (
+            id int not null,
+            name text,
+            health int not null
+        )", ())?;
+
+    let entities = vec![
+        Entity { id: 1, name: Some("Tree".into()), health: 100 },
+        Entity { id: 2, name: None, health: 100 },
+        Entity { id: 3, name: Some("Path".into()), health: 0 },
+        Entity { id: 4, name: Some("Player".into()), health: 100 },
+    ];
+
+    for mut stmt in pool.prepare(r"INSERT INTO tmp.entity ( id, health, name)
+                                VALUES (:id, :health, :name)").into_iter()
+    {
+        for e in entities.iter() {
+            // `execute` takes ownership of `params` so we pass account name by reference.
+            // Unwrap each result just to make sure no errors happened.
+            stmt.execute(params!{
+                "id" => e.id,
+                "health" => e.health,
+                "name" => &e.name,
+            })?;
+        }
+    }
+    println!("{:?}", pool.prep_exec("SHOW SCHEMAS", ())
+            .map(|result| {
+                result.map(|x| x.unwrap())
+                    .map(|row| {
+                        let row: String = mysql::from_row(row);
+                        format!("{} ", row)
+                    })
+                    .collect::<String>()
+            }).unwrap());
+
+    let selected_entities: Vec<Entity> = pool.prep_exec("SELECT id, health, name FROM tmp.entity", ())
+        .map(|result| {
+            // In this closure we will map `QueryResult` to `Vec<Payment>`
+            // `QueryResult` is iterator over `MyResult<row, err>` so first call to `map`
+            // will map each `MyResult` to contained `row` (no proper error handling)
+            // and second call to `map` will map each `row` to `Payment`
+            result.map(|x| x.unwrap()).map(|row| {
+                let (id, health, name) = mysql::from_row(row);
+                Entity {
+                    id: id,
+                    health: health,
+                    name: name,
+                }
+            }).collect() // Collect payments so now `QueryResult` is mapped to `Vec<Payment>`
+        }).unwrap(); // Unwrap `Vec<Payment>`
+
+    // Mysql gives no guarantees on order of returned rows without `ORDER BY`
+    // so assume we are lukky.
+    assert_eq!(entities, selected_entities);
 
     // Read request body from stdin
     let mut data = Vec::new();
