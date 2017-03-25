@@ -91,61 +91,11 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
     //        .expect(&format!("Error connecting to {}", database_url));
 
     let pool = mysql::Pool::new(&*database_url)?;
-    pool.prep_exec(r"CREATE TEMPORARY TABLE tmp.entity (
+    pool.prep_exec(r"CREATE TABLE IF NOT EXISTS entity (
             id int not null,
             name text,
             health int not null
         )", ())?;
-
-    let entities = vec![
-        Entity { id: 1, name: Some("Tree".into()), health: 100 },
-        Entity { id: 2, name: None, health: 100 },
-        Entity { id: 3, name: Some("Path".into()), health: 0 },
-        Entity { id: 4, name: Some("Player".into()), health: 100 },
-    ];
-
-    for mut stmt in pool.prepare(r"INSERT INTO tmp.entity ( id, health, name)
-                                VALUES (:id, :health, :name)").into_iter()
-    {
-        for e in entities.iter() {
-            // `execute` takes ownership of `params` so we pass account name by reference.
-            // Unwrap each result just to make sure no errors happened.
-            stmt.execute(params!{
-                "id" => e.id,
-                "health" => e.health,
-                "name" => &e.name,
-            })?;
-        }
-    }
-    println!("{:?}", pool.prep_exec("SHOW SCHEMAS", ())
-            .map(|result| {
-                result.map(|x| x.unwrap())
-                    .map(|row| {
-                        let row: String = mysql::from_row(row);
-                        format!("{} ", row)
-                    })
-                    .collect::<String>()
-            }).unwrap());
-
-    let selected_entities: Vec<Entity> = pool.prep_exec("SELECT id, health, name FROM tmp.entity", ())
-        .map(|result| {
-            // In this closure we will map `QueryResult` to `Vec<Payment>`
-            // `QueryResult` is iterator over `MyResult<row, err>` so first call to `map`
-            // will map each `MyResult` to contained `row` (no proper error handling)
-            // and second call to `map` will map each `row` to `Payment`
-            result.map(|x| x.unwrap()).map(|row| {
-                let (id, health, name) = mysql::from_row(row);
-                Entity {
-                    id: id,
-                    health: health,
-                    name: name,
-                }
-            }).collect() // Collect payments so now `QueryResult` is mapped to `Vec<Payment>`
-        }).unwrap(); // Unwrap `Vec<Payment>`
-
-    // Mysql gives no guarantees on order of returned rows without `ORDER BY`
-    // so assume we are lukky.
-    assert_eq!(entities, selected_entities);
 
     // Read request body from stdin
     let mut data = Vec::new();
@@ -170,7 +120,6 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
 
     // Route request 
     let _response = router!(request,
-        // first route
         (GET) (/) => {
             // print the http headers from the request for fun!
             let mut s = String::new();
@@ -179,10 +128,56 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
             }
             Response::text(s)
         },
-
-        // second route
         (GET) (/hello) => {
             Response::html("<p>Hello world</p>")
+        },
+        (GET) (/entity/{id: i32}) => {
+            let selected_entities: String = pool.prep_exec(
+                "SELECT id, health, name FROM entity WHERE id = :id",
+                params!{ "id" => id })
+                .map(|result| {
+                    result.map(|x| x.unwrap())
+                        .map(|row| {
+                            let (id, health, name): (i32, i32, String)
+                                                     = mysql::from_row(row);
+                //        Entity {
+                //            id: id,
+                //            health: health,
+                //            name: name,
+                //        }
+                            format!(r"<ul>
+                            <li>{}</li>
+                            <li>{}</li>
+                            <li>{}</li>
+                            </ul>
+                            ", id, name, health)
+                        }).collect()
+                    }).unwrap();
+
+            Response::html(selected_entities)
+        },
+        (POST) (/entity/{id: i32}) => {
+            //let entities = vec![
+            //    Entity { id: 1, name: Some("Tree".into()), health: 100 },
+            //    Entity { id: 2, name: None, health: 100 },
+            //    Entity { id: 3, name: Some("Path".into()), health: 0 },
+            //    Entity { id: 4, name: Some("Player".into()), health: 100 },
+            //];
+
+            //for mut stmt in pool.prepare(r"INSERT INTO entity ( id, health, name)
+            //                            VALUES (:id, :health, :name)").into_iter()
+            //{
+            //    for e in entities.iter() {
+            //        // `execute` takes ownership of `params` so we pass account name by reference.
+            //        // Unwrap each result just to make sure no errors happened.
+            //        stmt.execute(params!{
+            //            "id" => e.id,
+            //            "health" => e.health,
+            //            "name" => &e.name,
+            //        })?;
+            //    }
+            //}
+            Response::html("<p>unimplemented!</p>")
         },
 
         // ... other routes here ...
