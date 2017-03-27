@@ -75,10 +75,10 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
     let database_url = env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set");
     let pool = mysql::Pool::new(&*database_url)?;
-    pool.prep_exec(r"CREATE TABLE IF NOT EXISTS entity (
-            id int not null,
-            name text,
-            health int not null
+    pool.prep_exec(r"CREATE TABLE IF NOT EXISTS entities (
+            id INTEGER PRIMARY KEY,
+            name VARCHAR(50),
+            health INTEGER NOT NULL
         )", ())?;
     pool.prep_exec(r"CREATE TABLE IF NOT EXISTS notes (
             id INTEGER PRIMARY KEY,
@@ -121,7 +121,7 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
         },
         (GET) (/entity/{id: i32}) => {
             let selected_entities: String = pool.prep_exec(
-                "SELECT id, health, name FROM entity WHERE id = :id",
+                "SELECT id, health, name FROM entities WHERE id = :id",
                 params!{ "id" => id })
                 .map(|result| {
                     result.filter_map(Result::ok)
@@ -143,26 +143,6 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
                     }).unwrap();
 
             Response::html(selected_entities)
-        },
-        (POST) (/entity/{id: i32}) => {
-            //let entities = vec![
-            //    Entity { id: 4, name: Some("Player".into()), health: 100 },
-            //];
-
-            //for mut stmt in pool.prepare(r"INSERT INTO entity ( id, health, name)
-            //                            VALUES (:id, :health, :name)").into_iter()
-            //{
-            //    for e in entities.iter() {
-            //        // `execute` takes ownership of `params` so we pass account name by reference.
-            //        // Unwrap each result just to make sure no errors happened.
-            //        stmt.execute(params!{
-            //            "id" => e.id,
-            //            "health" => e.health,
-            //            "name" => &e.name,
-            //        })?;
-            //    }
-            //}
-            Response::html("<p>unimplemented!</p>")
         },
 
         (GET) (/notes) => {
@@ -188,12 +168,6 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
 
         (GET) (/note/{id: i32}) => {
             // This route returns the content of a note, if it exists.
-
-            // Note that this code is a bit unergonomic, but this is mostly a problem with the
-            // database client library and not rouille itself.
-
-            // And then perform the query and write to `content`. This line can only panic if the
-            // SQL is malformed.
             let content = pool.prep_exec(
                 "SELECT content FROM notes WHERE id = :id",
                 params!{ "id" => id })
@@ -211,54 +185,80 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
             }
         },
 
-        //(PUT) (/note/{id: i32}) => {
-        //    // This route modifies the content of an existing note.
+        (PUT) (/note/{id: i32}) => {
+            // This route modifies the content of an existing note.
 
-        //    // We start by reading the body of the HTTP request into a `String`.
-        //    let body = try_or_400!(rouille::input::plain_text_body(&request));
+            // We start by reading the body of the HTTP request into a `String`.
+            if let Ok(body) = rouille::input::plain_text_body(&request) {
+                let update_count = pool.prep_exec("UPDATE notes SET content = :content WHERE id = :id",
+                    params!{ "id" => id, "content" => body })
+                    .map(|result| {
+                        result.filter_map(Result::ok)
+                            .map(|row| {
+                                let c: u64 = mysql::from_row(row);
+                                c
+                            }).collect::<Vec<u64>>()
+                        });
 
-        //    // And write the content with a query. This line can only panic if the
-        //    // SQL is malformed.
-        //    let updated = db.execute("UPDATE notes SET content = $2 WHERE id = $1",
-        //                             &[&id, &body]).unwrap();
 
-        //    // We determine whether the note exists thanks to the number of rows that
-        //    // were modified.
-        //    if updated >= 1 {
-        //        Response::text("The note has been updated")
-        //    } else {
-        //        Response::empty_404()
-        //    }
-        //},
+                // We determine whether the note exists thanks to the number of rows that
+                // were modified.
+                match update_count {
+                    Ok(c) => {
+                        if c[0] > 0 {
+                            Response::text("The note has been updated")
+                        } else {
+                            Response::empty_404()
+                        }
+                    }
+                    Err(_) => Response::empty_400(),
+                }
+            } else {
+                Response::empty_400()
+            }
+        },
 
-        //(POST) (/note) => {
-        //    // This route creates a new node whose initial content is the body.
+        (POST) (/note) => {
+            // This route creates a new node whose initial content is the body.
 
-        //    // We start by reading the body of the HTTP request into a `String`.
-        //    let body = try_or_400!(rouille::input::plain_text_body(&request));
+            // We start by reading the body of the HTTP request into a `String`.
+            if let Ok(body) = rouille::input::plain_text_body(&request) {
+                let id = pool.prep_exec(
+                "INSERT INTO notes(content) VALUES (:content) RETURNING id",
+                    params!{ "content" => body })
+                    .map(|result| {
+                        result.filter_map(Result::ok)
+                            .map(|row| {
+                                let id: i32 = mysql::from_row(row);
+                                id
+                            }).collect::<Vec<i32>>()
+                        });
 
-        //    // To do so, we first create a variable that will receive the content.
-        //    let mut id: Option<i32> = None;
-        //    // And then perform the query and write to `content`. This line can only panic if the
-        //    // SQL is malformed.
-        //    for row in &db.query("INSERT INTO notes(content) VALUES ($1) RETURNING id", &[&body]).unwrap() {
-        //        id = Some(row.get(0));
-        //    }
 
-        //    let id = id.unwrap();
+                // We determine whether the note exists thanks to the number of rows that
+                // were modified.
+                match id {
+                    Ok(id) => {
+                        let mut response = Response::text("The note has been created");
+                        response.status_code = 201;
+                        response.headers.push(("Location".into(), format!("/note/{}", id[0]).into()));
+                        response
+                    }
+                    Err(_) => Response::empty_400(),
+                }
+            } else {
+                Response::empty_400()
+            }
+        },
 
-        //    let mut response = Response::text("The note has been created");
-        //    response.status_code = 201;
-        //    response.headers.push(("Location".into(), format!("/note/{}", id).into()));
-        //    response
-        //},
-
-        //(DELETE) (/note/{id: i32}) => {
-        //    // This route deletes a note. This line can only panic if the
-        //    // SQL is malformed.
-        //    db.execute("DELETE FROM notes WHERE id = $1", &[&id]).unwrap();
-        //    Response::text("")
-        //},
+        (DELETE) (/note/{id: i32}) => {
+            // This route deletes a note. This line can only panic if the
+            // SQL is malformed.
+            match pool.prep_exec("DELETE FROM notes WHERE id = :id", params!{ "id" => id }) {
+                Ok(_) => Response::text(""),
+                Err(_) => Response::empty_400(),
+            }
+        },
 
         // If none of the other blocks matches the request, return a 404 response.
         _ => Response::empty_404()
