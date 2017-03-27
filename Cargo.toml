@@ -7,15 +7,13 @@ version = "0.1.0"
 name = "legendsof1f600"
 
 [dependencies]
+chrono = "0.2.0"
 dotenv = "0.8.0"
 envy = "0.2.0"
+mysql = "10.0.0"
 rouille = "1.0.1"
-chrono = "0.2.0"
-rustc-serialize = "0.3.21"
+rustc-serialize = "0.3.23"
 serde = "0.9.11"
 serde_derive = "0.9.11"
 specs = "0.7.0"
 yaml-rust = "0.3.4"
-#diesel = { version = "0.12.0", features = ["mysql"] }
-#diesel_codegen = { version = "0.12.0", features = ["mysql"] }
-mysql = "10.0.0"

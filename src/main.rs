@@ -8,34 +8,21 @@ extern crate yaml_rust;
 extern crate serde_derive;
 extern crate dotenv;
 extern crate envy;
-//#[macro_use]
-//extern crate diesel;
-//#[macro_use]
-//extern crate diesel_codegen;
 #[macro_use]
 extern crate mysql;
+extern crate rustc_serialize;
 
 use dotenv::dotenv;
-use std::io::{self, Read, Write};
-use std::panic;
-use std::time::{Duration, Instant};
 use rouille::Request;
 use rouille::Response;
 
-//use diesel::prelude::*;
-//use diesel::mysql::MysqlConnection;
-
 use std::ascii::AsciiExt;
 use std::env;
+use std::io::{self, Read, Write};
+use std::panic;
+use std::time::{Duration, Instant};
 
 mod world;
-
-#[derive(Debug, PartialEq, Eq)]
-struct Entity {
-    id: i32,
-    name: Option<String>,
-    health: i32,
-}
 
 #[derive(Deserialize, Debug)]
 struct EnvRequest {
@@ -86,15 +73,16 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
     //println!("{:?}", request);
 
     let database_url = env::var("DATABASE_URL")
-                .expect("DATABASE_URL must be set");
-    //let connection = MysqlConnection::establish(&database_url)
-    //        .expect(&format!("Error connecting to {}", database_url));
-
+        .expect("DATABASE_URL must be set");
     let pool = mysql::Pool::new(&*database_url)?;
     pool.prep_exec(r"CREATE TABLE IF NOT EXISTS entity (
             id int not null,
             name text,
             health int not null
+        )", ())?;
+    pool.prep_exec(r"CREATE TABLE IF NOT EXISTS notes (
+            id INTEGER PRIMARY KEY,
+            content TEXT NOT NULL
         )", ())?;
 
     // Read request body from stdin
@@ -136,7 +124,7 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
                 "SELECT id, health, name FROM entity WHERE id = :id",
                 params!{ "id" => id })
                 .map(|result| {
-                    result.map(|x| x.unwrap())
+                    result.filter_map(Result::ok)
                         .map(|row| {
                             let (id, health, name): (i32, i32, String)
                                                      = mysql::from_row(row);
@@ -158,9 +146,6 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
         },
         (POST) (/entity/{id: i32}) => {
             //let entities = vec![
-            //    Entity { id: 1, name: Some("Tree".into()), health: 100 },
-            //    Entity { id: 2, name: None, health: 100 },
-            //    Entity { id: 3, name: Some("Path".into()), health: 0 },
             //    Entity { id: 4, name: Some("Player".into()), health: 100 },
             //];
 
@@ -180,12 +165,103 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
             Response::html("<p>unimplemented!</p>")
         },
 
-        // ... other routes here ...
+        (GET) (/notes) => {
+            // This route returns the list of notes. We perform the query and output it as JSON.
 
-        // default route
-        _ => {
-            Response::text("Default Space")
-        }
+            #[derive(RustcEncodable)]
+            struct Elem { id: String }
+
+            let out = pool.prep_exec("SELECT id FROM notes", ())
+                .map(|result| {
+                    result.filter_map(Result::ok)
+                        .map(|row| {
+                            let id: i32 = mysql::from_row(row);
+                            Elem { id: format!("/note/{}", id) }
+                        }).collect::<Vec<Elem>>()
+                    });
+
+            match out {
+                Ok(o) => Response::json(&o),
+                Err(_) => Response::text("error"),
+            }
+        },
+
+        (GET) (/note/{id: i32}) => {
+            // This route returns the content of a note, if it exists.
+
+            // Note that this code is a bit unergonomic, but this is mostly a problem with the
+            // database client library and not rouille itself.
+
+            // And then perform the query and write to `content`. This line can only panic if the
+            // SQL is malformed.
+            let content = pool.prep_exec(
+                "SELECT content FROM notes WHERE id = :id",
+                params!{ "id" => id })
+                .map(|result| {
+                    result.filter_map(Result::ok)
+                        .map(|row| {
+                            let c: String = mysql::from_row(row);
+                            c
+                        }).collect::<String>()
+                    });
+
+            match content {
+                Ok(content) => Response::text(content),
+                Err(_) => Response::empty_404(),
+            }
+        },
+
+        //(PUT) (/note/{id: i32}) => {
+        //    // This route modifies the content of an existing note.
+
+        //    // We start by reading the body of the HTTP request into a `String`.
+        //    let body = try_or_400!(rouille::input::plain_text_body(&request));
+
+        //    // And write the content with a query. This line can only panic if the
+        //    // SQL is malformed.
+        //    let updated = db.execute("UPDATE notes SET content = $2 WHERE id = $1",
+        //                             &[&id, &body]).unwrap();
+
+        //    // We determine whether the note exists thanks to the number of rows that
+        //    // were modified.
+        //    if updated >= 1 {
+        //        Response::text("The note has been updated")
+        //    } else {
+        //        Response::empty_404()
+        //    }
+        //},
+
+        //(POST) (/note) => {
+        //    // This route creates a new node whose initial content is the body.
+
+        //    // We start by reading the body of the HTTP request into a `String`.
+        //    let body = try_or_400!(rouille::input::plain_text_body(&request));
+
+        //    // To do so, we first create a variable that will receive the content.
+        //    let mut id: Option<i32> = None;
+        //    // And then perform the query and write to `content`. This line can only panic if the
+        //    // SQL is malformed.
+        //    for row in &db.query("INSERT INTO notes(content) VALUES ($1) RETURNING id", &[&body]).unwrap() {
+        //        id = Some(row.get(0));
+        //    }
+
+        //    let id = id.unwrap();
+
+        //    let mut response = Response::text("The note has been created");
+        //    response.status_code = 201;
+        //    response.headers.push(("Location".into(), format!("/note/{}", id).into()));
+        //    response
+        //},
+
+        //(DELETE) (/note/{id: i32}) => {
+        //    // This route deletes a note. This line can only panic if the
+        //    // SQL is malformed.
+        //    db.execute("DELETE FROM notes WHERE id = $1", &[&id]).unwrap();
+        //    Response::text("")
+        //},
+
+        // If none of the other blocks matches the request, return a 404 response.
+        _ => Response::empty_404()
     );
 
     // Send resulting response after routing
@@ -220,7 +296,7 @@ fn send<W, F>(rq: &Request, mut output: W, f: F)
             for &(ref k, ref v) in response.headers.iter() {
                 writeln!(output, "{}: {}", k, v)?;
             }
-            //writeln!(output, "Status: {}", response.status_code)?;
+            writeln!(output, "Status: {}", response.status_code)?;
             let (mut response_body, content_length) = response.data.into_reader_and_size();
             if let Some(content_length) = content_length {
                 writeln!(output, "Content-Length: {}",  content_length)?;
