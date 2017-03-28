@@ -44,8 +44,10 @@ struct EnvRequest {
 fn http_headers() -> Vec<(String, String)> {
     ::std::env::vars().filter_map(|(k, v)| {
         let k = k.replace("_", "-");
-        if k == "CONTENT-TYPE" {
-            return Some((k.into(), v))
+        match &*k {
+            "CONTENT-TYPE" => return Some((k.into(), v)),
+            "CONTENT-LENGTH" => return Some((k.into(), v)),
+            _ => {}
         }
         match k.split("HTTP-").nth(1) {
             Some(k) => Some((k.into(), v)),
@@ -73,25 +75,39 @@ fn main() {
 
 fn handle() -> Result<(), Box<::std::error::Error>> {
     // Deserialize request from environment variables
-    let request = envy::from_env::<EnvRequest>()?;
+    let mut request = envy::from_env::<EnvRequest>()?;
     //println!("{:?}", request);
 
     let database_url = env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set");
     let pool = mysql::Pool::new(&*database_url)?;
     pool.prep_exec(r"CREATE TABLE IF NOT EXISTS entities (
-            id INTEGER PRIMARY KEY,
+            id INTEGER AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(50),
             health INTEGER NOT NULL
         )", ())?;
     pool.prep_exec(r"CREATE TABLE IF NOT EXISTS notes (
-            id INTEGER PRIMARY KEY,
+            id INTEGER AUTO_INCREMENT PRIMARY KEY,
             content TEXT NOT NULL
         )", ())?;
 
     // Read request body from stdin
+    loop {
+        let mut buffer = String::new();
+        io::stdin().read_line(&mut buffer)?;
+        if buffer.contains(": ") {
+            // filter out form headers from data if it exists
+            let header: Vec<&str> = buffer.split(": ").collect();
+            request.headers.push((header[0].into(), header[1].into()));
+            continue
+        } else if buffer.is_empty() {
+            break
+        }
+    }
+    // finish reading
     let mut data = Vec::new();
-    io::stdin().take(request.content_length).read_to_end(&mut data)?;
+    io::stdin().read_to_end(&mut data)?;
+
 
     // Generate a Rouille Request from the EnvRequest and body data from STDIN
     // These fake_http methods are most-likely for testing but serve our purposes.
@@ -228,18 +244,21 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
             // This route creates a new node whose initial content is the body.
 
             // We start by reading the body of the HTTP request into a `String`.
-            let mut buf = Vec::new();
-            request.data().unwrap().read_to_end(&mut buf).unwrap();
-            println!("{:?}", String::from_utf8(buf).unwrap());
+            //let mut buf = Vec::new();
+            //request.data().unwrap().read_to_end(&mut buf).unwrap();
+            //println!("{:?}", String::from_utf8(buf).unwrap());
             let body = post_input!(&request, {
                 content: String,
             });
+
+            //println!("{:?}", body);
             
             match body {
                 Ok(body) => {
-                    let id = pool.prep_exec(
-                        "INSERT INTO notes(content) VALUES (:content) RETURNING id",
-                        params!{ "content" => body.content })
+                    pool.prep_exec(
+                        "INSERT INTO notes (content) VALUES (:content);",
+                        params!{ "content" => format!("{:?}", body.content) }).unwrap();
+                    let id = pool.prep_exec("SELECT LAST_INSERT_ID();", ())
                         .map(|result| {
                             result.filter_map(Result::ok)
                                 .map(|row| {
