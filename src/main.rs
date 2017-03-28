@@ -16,7 +16,6 @@ use dotenv::dotenv;
 use rouille::Request;
 use rouille::Response;
 
-use std::ascii::AsciiExt;
 use std::env;
 use std::io::{self, Read, Write};
 use std::panic;
@@ -44,11 +43,16 @@ struct EnvRequest {
 
 fn http_headers() -> Vec<(String, String)> {
     ::std::env::vars().filter_map(|(k, v)| {
-       match k.split("HTTP_").nth(1) {
-           Some(k) => Some((k.into(), v)),
-           None => None,
-       }
-    }).collect::<Vec<_>>()
+        let k = k.replace("_", "-");
+        if k == "CONTENT-TYPE" {
+            return Some((k.into(), v))
+        }
+        match k.split("HTTP-").nth(1) {
+            Some(k) => Some((k.into(), v)),
+            None => None,
+        }
+    })
+    .collect::<Vec<_>>()
 }
 
 fn main() {
@@ -109,12 +113,13 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
     // Route request 
     let _response = router!(request,
         (GET) (/) => {
-            // print the http headers from the request for fun!
-            let mut s = String::new();
-            for (k, v) in request.headers() {
-                s.push_str(&*format!("{}: {}\r\n", k, v));
+            use std::fs::File;
+            
+            if let Ok(file) = File::open("assets/index.html") {
+                Response::from_file("text/html", file)
+            } else {
+                Response::empty_404()
             }
-            Response::text(s)
         },
         (GET) (/hello) => {
             Response::html("<p>Hello world</p>")
@@ -190,7 +195,8 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
 
             // We start by reading the body of the HTTP request into a `String`.
             if let Ok(body) = rouille::input::plain_text_body(&request) {
-                let update_count = pool.prep_exec("UPDATE notes SET content = :content WHERE id = :id",
+                let update_count = pool.prep_exec(
+                    "UPDATE notes SET content = :content WHERE id = :id",
                     params!{ "id" => id, "content" => body })
                     .map(|result| {
                         result.filter_map(Result::ok)
@@ -222,32 +228,44 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
             // This route creates a new node whose initial content is the body.
 
             // We start by reading the body of the HTTP request into a `String`.
-            if let Ok(body) = rouille::input::plain_text_body(&request) {
-                let id = pool.prep_exec(
-                "INSERT INTO notes(content) VALUES (:content) RETURNING id",
-                    params!{ "content" => body })
-                    .map(|result| {
-                        result.filter_map(Result::ok)
-                            .map(|row| {
-                                let id: i32 = mysql::from_row(row);
-                                id
-                            }).collect::<Vec<i32>>()
-                        });
+            let mut buf = Vec::new();
+            request.data().unwrap().read_to_end(&mut buf).unwrap();
+            println!("{:?}", String::from_utf8(buf).unwrap());
+            let body = post_input!(&request, {
+                content: String,
+            });
+            
+            match body {
+                Ok(body) => {
+                    let id = pool.prep_exec(
+                        "INSERT INTO notes(content) VALUES (:content) RETURNING id",
+                        params!{ "content" => body.content })
+                        .map(|result| {
+                            result.filter_map(Result::ok)
+                                .map(|row| {
+                                    let id: i32 = mysql::from_row(row);
+                                    id
+                                }).collect::<Vec<i32>>()
+                            });
 
 
-                // We determine whether the note exists thanks to the number of rows that
-                // were modified.
-                match id {
-                    Ok(id) => {
-                        let mut response = Response::text("The note has been created");
-                        response.status_code = 201;
-                        response.headers.push(("Location".into(), format!("/note/{}", id[0]).into()));
-                        response
+                    // We determine whether the note exists thanks to the number of rows that
+                    // were modified.
+                    match id {
+                        Ok(id) => {
+                            let mut response = Response::text("The note has been created");
+                            response.status_code = 201;
+                            response.headers.push(
+                                ("Location".into(),
+                                format!("/note/{}", id[0]).into()));
+                            response
+                        }
+                        Err(e) => Response::html(
+                            format!("<h1>400 Not Found</h1><p>{}</p>", e)),
                     }
-                    Err(_) => Response::empty_400(),
                 }
-            } else {
-                Response::empty_400()
+                Err(e) => Response::html(
+                    format!("<h1>400 Not Found</h1><p>{}</p>", e)),
             }
         },
 
