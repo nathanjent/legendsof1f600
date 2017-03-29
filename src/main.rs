@@ -92,22 +92,8 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
         )", ())?;
 
     // Read request body from stdin
-    loop {
-        let mut buffer = String::new();
-        io::stdin().read_line(&mut buffer)?;
-        if buffer.contains(": ") {
-            // filter out form headers from data if it exists
-            let header: Vec<&str> = buffer.split(": ").collect();
-            request.headers.push((header[0].into(), header[1].into()));
-            continue
-        } else if buffer.is_empty() {
-            break
-        }
-    }
-    // finish reading
     let mut data = Vec::new();
     io::stdin().read_to_end(&mut data)?;
-
 
     // Generate a Rouille Request from the EnvRequest and body data from STDIN
     // These fake_http methods are most-likely for testing but serve our purposes.
@@ -244,21 +230,16 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
             // This route creates a new node whose initial content is the body.
 
             // We start by reading the body of the HTTP request into a `String`.
-            //let mut buf = Vec::new();
-            //request.data().unwrap().read_to_end(&mut buf).unwrap();
-            //println!("{:?}", String::from_utf8(buf).unwrap());
             let body = post_input!(&request, {
                 content: String,
             });
-
-            //println!("{:?}", body);
             
             match body {
                 Ok(body) => {
                     pool.prep_exec(
-                        "INSERT INTO notes (content) VALUES (:content);",
+                        "INSERT INTO notes (content) VALUES (:content)",
                         params!{ "content" => format!("{:?}", body.content) }).unwrap();
-                    let id = pool.prep_exec("SELECT LAST_INSERT_ID();", ())
+                    let id = pool.prep_exec("SELECT MAX(id) FROM notes", ())
                         .map(|result| {
                             result.filter_map(Result::ok)
                                 .map(|row| {
@@ -266,7 +247,6 @@ fn handle() -> Result<(), Box<::std::error::Error>> {
                                     id
                                 }).collect::<Vec<i32>>()
                             });
-
 
                     // We determine whether the note exists thanks to the number of rows that
                     // were modified.
